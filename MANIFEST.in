@@ -1,0 +1,9 @@
+#include <filename> for non-python-code files
+include read_tree/check_syscalls.c
+include read_tree/check_syscalls.h
+include read_tree/read_tree.c
+include read_tree/read_tree.h
+include read_tree/read_tree_wrap.c
+include read_tree/stringparse.c
+include read_tree/stringparse.h
+include read_tree/strtonum.c
