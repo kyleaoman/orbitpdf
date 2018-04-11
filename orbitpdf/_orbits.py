@@ -1,14 +1,14 @@
 import numpy as np
 import h5py
 import astropy.units as U
-from joblib import Parallel, delayed
+from pathos.multiprocessing import ProcessPool
 import itertools
 import os
 from datetime import datetime
 
 import read_tree
 
-def get_superparent(halo):
+def _get_superparent(halo):
 
     if halo is None:
         return None
@@ -29,296 +29,6 @@ def _log(*logmsgs):
         print(*(logmsgs + (timer, )))
 
         return
-
-def _extract_cluster_arrays(cluster_branch, **cfg):
-
-    h0 = cfg['h0']
-
-    data = {}
-
-    data['ids'] = [halo.id if halo is not None else -1 for halo in cluster_branch]
-    data['mvirs'] = [halo.mvir / h0 if halo is not None else np.nan for halo in cluster_branch]
-    data['rvirs'] = [halo.rvir / h0 if halo is not None else np.nan for halo in cluster_branch]
-    data['vrmss'] = [halo.vrms if halo is not None else np.nan for halo in cluster_branch]
-
-    subhalos = []
-    for halo in cluster_branch:
-        if halo is not None:
-            if halo.parent is not None:
-                subhalos.append(True)
-            else:
-                subhalos.append(False)
-        else:
-            subhalos.append(False)
-    data['subhalos'] = subhalos
-
-    superparent_mvirs = []
-    for halo in cluster_branch:
-        superparent = get_superparent(halo)
-        if superparent is not None:
-            superparent_mvirs.append(superparent.mvir / h0)
-        else:
-            superparent_mvirs.append(np.nan)
-
-    data['superparent_mvirs'] = superparent_mvirs
-
-    data['xs'] = [halo.pos[0] / h0 if halo is not None else np.nan for halo in cluster_branch]
-    data['ys'] = [halo.pos[1] / h0 if halo is not None else np.nan for halo in cluster_branch]
-    data['zs'] = [halo.pos[2] / h0 if halo is not None else np.nan for halo in cluster_branch]
-
-    data['vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in cluster_branch]
-    data['vys'] = [halo.vel[1] if halo is not None else np.nan for halo in cluster_branch]
-    data['vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in cluster_branch]
-
-    return data
-
-def _extract_interloper_arrays(halo, is_near, **cfg):
-
-    h0 = cfg['h0']
-
-    data = {}
-
-    data['ids'] = [halo.id]
-    data['mvirs'] = [halo.mvir / h0]
-    data['rvirs'] = [halo.rvir / h0]
-    data['vrmss'] = [halo.vrms]
-    data['xs'] = [halo.pos[0] / h0]
-    data['ys'] = [halo.pos[1] / h0]
-    data['zs'] = [halo.pos[2] / h0]
-    data['vxs'] = [halo.vel[0]]
-    data['vys'] = [halo.vel[1]]
-    data['vzs'] = [halo.vel[2]]
-
-    return {k: data for k in is_near}
-
-def _extract_orbit_arrays(halo_branch, superparent_branch, **cfg):
-
-    h0 = cfg['h0']
-
-    data = {}
-
-    data['cluster_id'] = get_superparent(halo_branch[-1]).id
-
-    data['ids'] = [halo.id if halo is not None else -1 for halo in halo_branch]
-    data['mvirs'] = [halo.mvir / h0 if halo is not None else np.nan for halo in halo_branch]
-    data['rvirs'] = [halo.rvir / h0 if halo is not None else np.nan for halo in halo_branch]
-    data['vrmss'] = [halo.vrms if halo is not None else np.nan for halo in halo_branch]
-    data['xs'] = [halo.pos[0] / h0 if halo is not None else np.nan for halo in halo_branch]
-    data['ys'] = [halo.pos[1] / h0 if halo is not None else np.nan for halo in halo_branch]
-    data['zs'] = [halo.pos[2] / h0 if halo is not None else np.nan for halo in halo_branch]
-    data['vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in halo_branch]
-    data['vys'] = [halo.vel[1] if halo is not None else np.nan for halo in halo_branch]
-    data['vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in halo_branch]
-    data['subsub'] = [
-        (get_superparent(halo).id == halo.parent.id) \
-        if get_superparent(halo) is not None \
-        else False \
-        for halo in halo_branch
-    ]
-
-    data['sp_ids'] = [halo.id if halo is not None else -1 for halo in superparent_branch]
-    data['sp_mvirs'] = [
-        halo.mvir / h0 if halo is not None else np.nan for halo in superparent_branch
-    ]
-    data['sp_rvirs'] = [
-        halo.rvir / h0 if halo is not None else np.nan for halo in superparent_branch
-    ]
-    data['sp_vrmss'] = [halo.vrms if halo is not None else np.nan for halo in superparent_branch]
-    data['sp_xs'] = [
-        halo.pos[0] / h0 if halo is not None else np.nan for halo in superparent_branch
-    ]
-    data['sp_ys'] = [
-        halo.pos[1] / h0 if halo is not None else np.nan for halo in superparent_branch
-    ]
-    data['sp_zs'] = [
-        halo.pos[2] / h0 if halo is not None else np.nan for halo in superparent_branch
-    ]
-    data['sp_vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in superparent_branch]
-    data['sp_vys'] = [halo.vel[1] if halo is not None else np.nan for halo in superparent_branch]
-    data['sp_vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in superparent_branch]
-
-    return data
-
-
-def _process_clusters(infile, scales, **cfg):
-
-    #must be picklable for multiprocessing, so keep out of class
-
-    skipsnaps, h0 = cfg['skipsnaps'], cfg['h0']
-
-    _log('  processing file', infile.split('/')[-1])
-
-    read_tree.read_tree(infile)
-    all_halos = read_tree.all_halos
-    halo_tree = read_tree.halo_tree
-
-    nsnaps = len(scales) - skipsnaps
-
-    out_arrays = []
-
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
-
-        if halo.parent is not None: #centrals only
-            continue
-
-        if (halo.mvir / h0 > m_max_cluster.value) or \
-           (halo.mvir / h0 < m_min_cluster.value):
-            continue
-
-        cluster_branch = []
-
-        for level in range(nsnaps):
-
-            if len(cluster_branch) == 0:
-                cluster_branch.append(halo)
-
-            elif cluster_branch[-1] is None:
-                cluster_branch.append(None)
-
-            else:
-                cluster_branch.append(cluster_branch[-1].prog)
-
-        cluster_branch = cluster_branch[::-1]
-
-        out_arrays.append(_extract_cluster_arrays(cluster_branch, **cfg))
-
-    read_tree.delete_tree()
-
-    return out_arrays
-
-def _process_interlopers(infile, outfile, **cfg):
-
-    #read clusters here will happen for each parallel process, but would be copied for each process
-    #anyway, would need to explicitly set up a shared memory object to work around this
-    #note: placed here it gets destroyed when no longer needed
-
-    skipsnaps, h0, lbox = cfg['skipsnaps'], cfg['h0'], cfg['lbox']
-    m_min_satellite, m_max_satellite = cfg['m_min_satellite'], cfg['m_max_satellite']
-    interloper_dR, interloper_dV = cfg['interloper_dR'], cfg['interloper_dV']
-
-    cluster_ids = []
-    cluster_xyzs = []
-    cluster_vzs = []
-    cluster_rvirs = []
-    cluster_vrmss = []
-
-    with h5py.File(outfile, 'r') as f:
-
-        for cluster_key, cluster in f['clusters'].items():
-
-            cluster_ids.append(cluster['ids'][-1 - skipsnaps])
-            cluster_xyzs.append(cluster['xyz'][-1 - skipsnaps])
-            cluster_vzs.append(cluster['vxyz'][-1 - skipsnaps, 2])
-            cluster_rvirs.append(cluster['rvir'][-1 - skipsnaps])
-            cluster_vrmss.append(cluster['vrms'][-1 - skipsnaps])
-
-    cluster_ids = np.array(cluster_ids, dtype=np.long)
-    cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
-    cluster_vzs = np.array(cluster_vzs, dtype=np.float)
-    cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
-    cluster_vrmss = np.array(cluster_vrmss, dtype=np.float)
-
-    _log('  processing file', infile.split('/')[-1])
-
-    read_tree.read_tree(infile)
-    all_halos = read_tree.all_halos
-    halo_tree = read_tree.halo_tree
-
-    out_arrays = []
-
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
-
-        if (halo.mvir / h0 > m_max_satellite.value) or \
-           (halo.mvir / h0 < m_min_satellite.value):
-            continue
-
-        xyz = np.array([
-            halo.pos[0] / h0, 
-            halo.pos[1] / h0, 
-            halo.pos[2] / h0
-        ], dtype=np.float)
-        vz = np.array([halo.vel[2]], dtype=np.float)
-
-        D = xyz - cluster_xyzs
-        D[D > lbox.value / 2.] -= lbox.value
-        D[D < -lbox.value / 2.] += lbox.value
-        dvz = np.abs(vz - cluster_vzs + 100.0 * h0 * D[:, 2]) / cluster_vrmss
-        D *= 1.E3 / cluster_rvirs[:, np.newaxis] #rvir in kpc
-        D = np.power(D, 2)
-
-        is_near = cluster_ids[
-            np.logical_and(
-                np.logical_and(
-                    D[:, 0] + D[:, 1] < np.power(interloper_dR, 2), #inside of circle
-                    np.sum(D, axis=1) > np.power(interloper_dR, 2) #outside of sphere
-                ),
-                dvz < interloper_dV #inside velocity offset limit
-            )
-        ]
-
-        if len(is_near):
-            out_arrays.append(_extract_interloper_arrays(halo, is_near, **cfg))
-
-    read_tree.delete_tree()
-
-    return out_arrays
-
-def _process_orbits(infile, scales, **cfg):
-
-    skipsnaps, h0, lbox = cfg['skipsnaps,'], cfg['h0'], cfg['lbox']
-    m_min_satellite, m_max_satellite = cfg['m_min_satellite'], cfg['m_max_satellite']
-    m_min_cluster, m_max_cluster = cfg['m_min_cluster'], cfg['m_max_cluster']
-
-    _log('  processing file', infile.split('/')[-1])
-
-    read_tree.read_tree(infile)
-    all_halos = read_tree.all_halos
-    halo_tree = read_tree.halo_tree
-
-    nsnaps = len(scales) - skipsnaps
-
-    out_arrays = []
-
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
-
-        if (halo.mvir / h0 > m_max_satellite.value) or \
-           (halo.mvir / h0 < m_min_satellite.value):
-            continue
-
-        superparent = get_superparent(halo)
-
-        if superparent is None:
-            continue
-
-        if (superparent.mvir / h0 < m_min_cluster.value) or \
-           (superparent.mvir / h0 > m_max_cluster.value):
-            continue
-
-        halo_branch = []
-        superparent_branch = []
-
-        for level in range(nsnaps):
-
-            if len(halo_branch) == 0:
-                halo_branch.append(halo)
-                superparent_branch.append(get_superparent(halo))
-
-            elif halo_branch[-1] is None:
-                halo_branch.append(None)
-                superparent_branch.append(None)
-
-            else:
-                halo_branch.append(halo_branch[-1].prog)
-                superparent_branch.append(get_superparent(halo_branch[-1]))
-
-        halo_branch = halo_branch[::-1]
-        superparent_branch = superparent_branch[::-1]
-
-        out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, **cfg))
-
-    read_tree.delete_tree()
-
-    return out_arrays
 
 class OrbitsConfig(dict):
 
@@ -392,19 +102,17 @@ class Orbits(object):
         self.scales = np.loadtxt(self.cfg.scalefile, unpack=True, usecols=[1])
         self.outfile = outfile
         self._find_files()
-        self.write_headers()
+        self._write_headers()
             
         return
 
     def cluster_search(self):
 
         _log('CLUSTER SEARCH')
-        all_out_arrays = Parallel(n_jobs=min(self.cfg.ncpu, len(self.infiles)))\
-                         (delayed(_process_clusters)(
-                             infile, 
-                             self.scales, 
-                             **self.cfg
-                         ) for infile in self.infiles)
+        pool = ProcessPool(processes = min(self.cfg.ncpu, len(self.infiles)))
+        all_out_arrays = pool.map(self._process_clusters, self.infiles)
+        pool.join()
+
         _log('CLUSTER REDUCTION')
         all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
 
@@ -418,12 +126,9 @@ class Orbits(object):
     def interloper_search(self):
 
         _log('INTERLOPER SEARCH')
-        all_out_arrays = Parallel(n_jobs=min(self.cfg.ncpu, len(self.infiles)))\
-                         (delayed(self._process_interlopers)(
-                             infile, 
-                             self.outfile, 
-                             **self.cfg
-                         ) for infile in self.infiles)
+        pool = ProcessPool(processes = min(self.cfg.ncpu, len(self.infiles)))
+        all_out_arrays = pool.map(self._process_interlopers, self.infiles)
+        pool.join()
 
         _log('INTERLOPER REDUCTION')
         all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
@@ -453,24 +158,9 @@ class Orbits(object):
 
     def orbit_search(self):
 
-        ##Parallel breaks because Pickle is used to pass return values, and pickle protocol 2 breaks for
-        ##data >~2GB in size -> go to python 3.5+ with protocol 4 to fix this, but python 3 not on 
-        ##champion.
-        ##Python3 is now available, so should be able to parallelize this, just need to adjust for
-        ##output after each file to keep memory under control.
-        #all_out_arrays = Parallel(n_jobs=min(self.cfg.ncpu, len(infiles)))\
-            #(delayed(self._process_orbits)(infile) for infile in infiles)
-        ##this also tends to run out of memory, so clear buffer between each input file
-        #all_out_arrays = [self._process_orbits(infile) for infile in infiles] #serial mode
-        #_log('ORBIT REDUCTION')
-        #all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
-        #_log('ORBIT OUTPUT')
-        #with h5py.File(self.outfile, 'a') as f:
-        #    for progress, out_array in enumerate(all_out_arrays):
-        #        if (progress % 1000) == 0:
-        #            _log(' ', progress, '/', len(all_out_arrays))
-        #        self._write_satellite(f, out_array)
-
+        ##Memory usage is too high if collecting everything before write to file.
+        ##Solution is to write after processing each file.
+        ##But doing this is parallel requires blocking, which I haven't figured out.
         for infile in self.infiles:
             _log('ORBIT SEARCH')
             out_arrays = self._process_orbits(infile, self.scales, **self.cfg)
@@ -495,11 +185,11 @@ class Orbits(object):
                            range(self.cfg.ndivs)
                    )]
         infiles = [infile for infile in infiles if os.path.exists(infile)]
-        self.infiles = infiles[:4]
+        self.infiles = infiles
 
         return
 
-    def write_headers(self):
+    def _write_headers(self):
         _log('HEADER OUTPUT')
         with h5py.File(self.outfile, 'w') as f:
             f.create_group('clusters')
@@ -687,3 +377,291 @@ class Orbits(object):
 
         return
 
+    def _extract_cluster_arrays(self, cluster_branch):
+
+        h0 = self.cfg.h0
+
+        data = {}
+
+        data['ids'] = [halo.id if halo is not None else -1 for halo in cluster_branch]
+        data['mvirs'] = [halo.mvir / h0 if halo is not None else np.nan for halo in cluster_branch]
+        data['rvirs'] = [halo.rvir / h0 if halo is not None else np.nan for halo in cluster_branch]
+        data['vrmss'] = [halo.vrms if halo is not None else np.nan for halo in cluster_branch]
+
+        subhalos = []
+        for halo in cluster_branch:
+            if halo is not None:
+                if halo.parent is not None:
+                    subhalos.append(True)
+                else:
+                    subhalos.append(False)
+            else:
+                subhalos.append(False)
+        data['subhalos'] = subhalos
+
+        superparent_mvirs = []
+        for halo in cluster_branch:
+            superparent = _get_superparent(halo)
+            if superparent is not None:
+                superparent_mvirs.append(superparent.mvir / h0)
+            else:
+                superparent_mvirs.append(np.nan)
+
+        data['superparent_mvirs'] = superparent_mvirs
+
+        data['xs'] = [halo.pos[0] / h0 if halo is not None else np.nan for halo in cluster_branch]
+        data['ys'] = [halo.pos[1] / h0 if halo is not None else np.nan for halo in cluster_branch]
+        data['zs'] = [halo.pos[2] / h0 if halo is not None else np.nan for halo in cluster_branch]
+
+        data['vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in cluster_branch]
+        data['vys'] = [halo.vel[1] if halo is not None else np.nan for halo in cluster_branch]
+        data['vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in cluster_branch]
+
+        return data
+
+    def _extract_interloper_arrays(self, halo, is_near):
+
+        h0 = self.cfg.h0
+
+        data = {}
+
+        data['ids'] = [halo.id]
+        data['mvirs'] = [halo.mvir / h0]
+        data['rvirs'] = [halo.rvir / h0]
+        data['vrmss'] = [halo.vrms]
+        data['xs'] = [halo.pos[0] / h0]
+        data['ys'] = [halo.pos[1] / h0]
+        data['zs'] = [halo.pos[2] / h0]
+        data['vxs'] = [halo.vel[0]]
+        data['vys'] = [halo.vel[1]]
+        data['vzs'] = [halo.vel[2]]
+
+        return {k: data for k in is_near}
+
+    def _extract_orbit_arrays(self, halo_branch, superparent_branch):
+
+        h0 = self.cfg.h0
+
+        data = {}
+
+        data['cluster_id'] = _get_superparent(halo_branch[-1]).id
+
+        data['ids'] = [halo.id if halo is not None else -1 for halo in halo_branch]
+        data['mvirs'] = [halo.mvir / h0 if halo is not None else np.nan for halo in halo_branch]
+        data['rvirs'] = [halo.rvir / h0 if halo is not None else np.nan for halo in halo_branch]
+        data['vrmss'] = [halo.vrms if halo is not None else np.nan for halo in halo_branch]
+        data['xs'] = [halo.pos[0] / h0 if halo is not None else np.nan for halo in halo_branch]
+        data['ys'] = [halo.pos[1] / h0 if halo is not None else np.nan for halo in halo_branch]
+        data['zs'] = [halo.pos[2] / h0 if halo is not None else np.nan for halo in halo_branch]
+        data['vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in halo_branch]
+        data['vys'] = [halo.vel[1] if halo is not None else np.nan for halo in halo_branch]
+        data['vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in halo_branch]
+        data['subsub'] = [
+            (_get_superparent(halo).id == halo.parent.id) \
+            if _get_superparent(halo) is not None \
+            else False \
+            for halo in halo_branch
+        ]
+
+        data['sp_ids'] = [halo.id if halo is not None else -1 for halo in superparent_branch]
+        data['sp_mvirs'] = [
+            halo.mvir / h0 if halo is not None else np.nan for halo in superparent_branch
+        ]
+        data['sp_rvirs'] = [
+            halo.rvir / h0 if halo is not None else np.nan for halo in superparent_branch
+        ]
+        data['sp_vrmss'] = [halo.vrms if halo is not None else np.nan for halo in superparent_branch]
+        data['sp_xs'] = [
+            halo.pos[0] / h0 if halo is not None else np.nan for halo in superparent_branch
+        ]
+        data['sp_ys'] = [
+            halo.pos[1] / h0 if halo is not None else np.nan for halo in superparent_branch
+        ]
+        data['sp_zs'] = [
+            halo.pos[2] / h0 if halo is not None else np.nan for halo in superparent_branch
+        ]
+        data['sp_vxs'] = [halo.vel[0] if halo is not None else np.nan for halo in superparent_branch]
+        data['sp_vys'] = [halo.vel[1] if halo is not None else np.nan for halo in superparent_branch]
+        data['sp_vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in superparent_branch]
+
+        return data
+
+
+    def _process_clusters(self, infile):
+
+        scales = self.scales
+        skipsnaps, h0 = self.cfg.skipsnaps, self.cfg.h0
+
+        _log('  processing file', infile.split('/')[-1])
+
+        read_tree.read_tree(infile)
+        all_halos = read_tree.all_halos
+        halo_tree = read_tree.halo_tree
+
+        nsnaps = len(scales) - skipsnaps
+
+        out_arrays = []
+
+        for halo in halo_tree.halo_lists[skipsnaps].halos:
+
+            if halo.parent is not None: #centrals only
+                continue
+
+            if (halo.mvir / h0 > m_max_cluster.value) or \
+               (halo.mvir / h0 < m_min_cluster.value):
+                continue
+
+            cluster_branch = []
+
+            for level in range(nsnaps):
+
+                if len(cluster_branch) == 0:
+                    cluster_branch.append(halo)
+
+                elif cluster_branch[-1] is None:
+                    cluster_branch.append(None)
+
+                else:
+                    cluster_branch.append(cluster_branch[-1].prog)
+
+            cluster_branch = cluster_branch[::-1]
+
+            out_arrays.append(_extract_cluster_arrays(cluster_branch, **cfg))
+
+        read_tree.delete_tree()
+
+        return out_arrays
+
+    def _process_interlopers(self, infile):
+
+        #read clusters here will happen for each parallel process, but would be copied for each 
+        #process anyway, would need to explicitly set up a shared memory object to work around this
+        #note: placed here it gets destroyed when no longer needed
+        outfile = self.outfile
+        skipsnaps, h0, lbox = cfg['skipsnaps'], cfg['h0'], cfg['lbox']
+        m_min_satellite, m_max_satellite = cfg['m_min_satellite'], cfg['m_max_satellite']
+        interloper_dR, interloper_dV = cfg['interloper_dR'], cfg['interloper_dV']
+
+        cluster_ids = []
+        cluster_xyzs = []
+        cluster_vzs = []
+        cluster_rvirs = []
+        cluster_vrmss = []
+
+        with h5py.File(outfile, 'r') as f:
+
+            for cluster_key, cluster in f['clusters'].items():
+
+                cluster_ids.append(cluster['ids'][-1 - skipsnaps])
+                cluster_xyzs.append(cluster['xyz'][-1 - skipsnaps])
+                cluster_vzs.append(cluster['vxyz'][-1 - skipsnaps, 2])
+                cluster_rvirs.append(cluster['rvir'][-1 - skipsnaps])
+                cluster_vrmss.append(cluster['vrms'][-1 - skipsnaps])
+
+        cluster_ids = np.array(cluster_ids, dtype=np.long)
+        cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
+        cluster_vzs = np.array(cluster_vzs, dtype=np.float)
+        cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
+        cluster_vrmss = np.array(cluster_vrmss, dtype=np.float)
+
+        _log('  processing file', infile.split('/')[-1])
+
+        read_tree.read_tree(infile)
+        all_halos = read_tree.all_halos
+        halo_tree = read_tree.halo_tree
+
+        out_arrays = []
+
+        for halo in halo_tree.halo_lists[skipsnaps].halos:
+
+            if (halo.mvir / h0 > m_max_satellite.value) or \
+               (halo.mvir / h0 < m_min_satellite.value):
+                continue
+
+            xyz = np.array([
+                halo.pos[0] / h0, 
+                halo.pos[1] / h0, 
+                halo.pos[2] / h0
+            ], dtype=np.float)
+            vz = np.array([halo.vel[2]], dtype=np.float)
+
+            D = xyz - cluster_xyzs
+            D[D > lbox.value / 2.] -= lbox.value
+            D[D < -lbox.value / 2.] += lbox.value
+            dvz = np.abs(vz - cluster_vzs + 100.0 * h0 * D[:, 2]) / cluster_vrmss
+            D *= 1.E3 / cluster_rvirs[:, np.newaxis] #rvir in kpc
+            D = np.power(D, 2)
+
+            is_near = cluster_ids[
+                np.logical_and(
+                    np.logical_and(
+                        D[:, 0] + D[:, 1] < np.power(interloper_dR, 2), #inside of circle
+                        np.sum(D, axis=1) > np.power(interloper_dR, 2) #outside of sphere
+                    ),
+                    dvz < interloper_dV #inside velocity offset limit
+                )
+            ]
+
+            if len(is_near):
+                out_arrays.append(_extract_interloper_arrays(halo, is_near, **cfg))
+
+        read_tree.delete_tree()
+
+        return out_arrays
+
+    def _process_orbits(self, infile):
+
+        skipsnaps, h0, lbox = self.cfg.skipsnaps, self.cfg.h0, self.cfg.lbox
+        m_min_satellite, m_max_satellite = self.cfg.m_min_satellite, self.cfg.m_max_satellite
+        m_min_cluster, m_max_cluster = self.cfg.m_min_cluster, self.cfg.m_max_cluster
+
+        _log('  processing file', infile.split('/')[-1])
+
+        read_tree.read_tree(infile)
+        all_halos = read_tree.all_halos
+        halo_tree = read_tree.halo_tree
+
+        nsnaps = len(scales) - skipsnaps
+
+        out_arrays = []
+
+        for halo in halo_tree.halo_lists[skipsnaps].halos:
+
+            if (halo.mvir / h0 > m_max_satellite.value) or \
+               (halo.mvir / h0 < m_min_satellite.value):
+                continue
+
+            superparent = _get_superparent(halo)
+
+            if superparent is None:
+                continue
+
+            if (superparent.mvir / h0 < m_min_cluster.value) or \
+               (superparent.mvir / h0 > m_max_cluster.value):
+                continue
+
+            halo_branch = []
+            superparent_branch = []
+
+            for level in range(nsnaps):
+
+                if len(halo_branch) == 0:
+                    halo_branch.append(halo)
+                    superparent_branch.append(_get_superparent(halo))
+
+                elif halo_branch[-1] is None:
+                    halo_branch.append(None)
+                    superparent_branch.append(None)
+
+                else:
+                    halo_branch.append(halo_branch[-1].prog)
+                    superparent_branch.append(_get_superparent(halo_branch[-1]))
+
+            halo_branch = halo_branch[::-1]
+            superparent_branch = superparent_branch[::-1]
+
+            out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, **cfg))
+
+        read_tree.delete_tree()
+
+        return out_arrays
