@@ -4,7 +4,7 @@ import astropy.units as U
 from pathos.multiprocessing import ProcessPool
 import itertools
 import os
-from datetime import datetime
+from ._util import _log
 
 import read_tree
 
@@ -21,14 +21,6 @@ def _get_superparent(halo):
         retval = retval.parent
 
     return retval
-
-def _log(*logmsgs):
-
-        T = datetime.now()
-        timer = ' [{0:02d}:{1:02d}:{2:02d}]'.format(T.hour, T.minute, T.second)
-        print(*(logmsgs + (timer, )))
-
-        return
 
 class OrbitsConfig(dict):
 
