@@ -30,7 +30,9 @@ def _log(*logmsgs):
 
         return
 
-def _extract_cluster_arrays(cluster_branch, h0):
+def _extract_cluster_arrays(cluster_branch, **cfg):
+
+    h0 = cfg['h0']
 
     data = {}
 
@@ -70,7 +72,9 @@ def _extract_cluster_arrays(cluster_branch, h0):
 
     return data
 
-def _extract_interloper_arrays(halo, is_near, h0):
+def _extract_interloper_arrays(halo, is_near, **cfg):
+
+    h0 = cfg['h0']
 
     data = {}
 
@@ -87,7 +91,9 @@ def _extract_interloper_arrays(halo, is_near, h0):
 
     return {k: data for k in is_near}
 
-def _extract_orbit_arrays(halo_branch, superparent_branch, h0):
+def _extract_orbit_arrays(halo_branch, superparent_branch, **cfg):
+
+    h0 = cfg['h0']
 
     data = {}
 
@@ -134,9 +140,11 @@ def _extract_orbit_arrays(halo_branch, superparent_branch, h0):
     return data
 
 
-def _process_clusters(infile, scales, **kwargs):
+def _process_clusters(infile, scales, **cfg):
 
     #must be picklable for multiprocessing, so keep out of class
+
+    skipsnaps, h0 = cfg['skipsnaps'], cfg['h0']
 
     _log('  processing file', infile.split('/')[-1])
 
@@ -172,17 +180,21 @@ def _process_clusters(infile, scales, **kwargs):
 
         cluster_branch = cluster_branch[::-1]
 
-        out_arrays.append(_extract_cluster_arrays(cluster_branch, h0))
+        out_arrays.append(_extract_cluster_arrays(cluster_branch, **cfg))
 
     read_tree.delete_tree()
 
     return out_arrays
 
-def _process_interlopers(infile, outfile, **kwargs):
+def _process_interlopers(infile, outfile, **cfg):
 
     #read clusters here will happen for each parallel process, but would be copied for each process
     #anyway, would need to explicitly set up a shared memory object to work around this
     #note: placed here it gets destroyed when no longer needed
+
+    skipsnaps, h0, lbox = cfg['skipsnaps'], cfg['h0'], cfg['lbox']
+    m_min_satellite, m_max_satellite = cfg['m_min_satellite'], cfg['m_max_satellite']
+    interloper_dR, interloper_dV = cfg['interloper_dR'], cfg['interloper_dV']
 
     cluster_ids = []
     cluster_xyzs = []
@@ -245,13 +257,17 @@ def _process_interlopers(infile, outfile, **kwargs):
         ]
 
         if len(is_near):
-            out_arrays.append(_extract_interloper_arrays(halo, is_near, h0))
+            out_arrays.append(_extract_interloper_arrays(halo, is_near, **cfg))
 
     read_tree.delete_tree()
 
     return out_arrays
 
-def _process_orbits(infile, scales, **kwargs):
+def _process_orbits(infile, scales, **cfg):
+
+    skipsnaps, h0, lbox = cfg['skipsnaps,'], cfg['h0'], cfg['lbox']
+    m_min_satellite, m_max_satellite = cfg['m_min_satellite'], cfg['m_max_satellite']
+    m_min_cluster, m_max_cluster = cfg['m_min_cluster'], cfg['m_max_cluster']
 
     _log('  processing file', infile.split('/')[-1])
 
@@ -298,7 +314,7 @@ def _process_orbits(infile, scales, **kwargs):
         halo_branch = halo_branch[::-1]
         superparent_branch = superparent_branch[::-1]
 
-        out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, h0))
+        out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, **cfg))
 
     read_tree.delete_tree()
 
@@ -479,7 +495,7 @@ class Orbits(object):
                            range(self.cfg.ndivs)
                    )]
         infiles = [infile for infile in infiles if os.path.exists(infile)]
-        self.infiles = infiles
+        self.infiles = infiles[:4]
 
         return
 
