@@ -36,13 +36,7 @@ class _BaseOrbitPDF(object):
         self.Nsatbins = len(self.cfg.pdf_m_min_satellite)
         self.Nclusterbins = len(self.cfg.pdf_m_min_cluster)
 
-        with h5py.File(self.cfg.orbitfile, 'r') as f:
-            self.sfs = np.array(f['config/scales'])
-            self.abins = np.concatenate((
-                np.array([self.sfs[0] - .5 * (self.sfs[1] - self.sfs[0])]),
-                self.sfs[:-1] + 0.5 * np.diff(self.sfs),
-                np.array([self.sfs[-1] + .5 * (self.sfs[-1] - self.sfs[-2])])
-            ))
+        self.init_qbins()
 
         self.orbit_rss = [
             [list() for n in range(self.Nsatbins)] 
@@ -87,6 +81,10 @@ class _BaseOrbitPDF(object):
 
     @abstractmethod
     def calculate_q(self, sat, cluster):
+        pass
+
+    @abstractmethod
+    def init_qbins(self):
         pass
 
     def process_orbits(self):
@@ -193,7 +191,7 @@ class _BaseOrbitPDF(object):
             )).T
             orbit_pdf, edges = np.histogramdd(
                 hist_input, 
-                bins=(self.cfg.vbins, self.cfg.rbins, self.cfg.abins)
+                bins=(self.cfg.vbins, self.cfg.rbins, self.cfg.qbins)
             )
             self.orbit_pdfs[i][j] = orbit_pdf
 
@@ -214,7 +212,7 @@ class _BaseOrbitPDF(object):
         with h5py.File(self.cfg.pdfsfile, 'w') as f:
             f['vbins'] = self.cfg.vbins
             f['rbins'] = self.cfg.rbins
-            f['abins'] = np.array(self.abins)
+            f['qbins'] = np.array(self.qbins)
             for i, j in product(range(self.Nclusterbins), range(self.Nsatbins)):
                 f['orbit_pdf_{0:0d}_{1:0d}'.format(i, j)] = self.orbit_pdfs[i][j]
                 f['interloper_pdf_{0:0d}_{1:0d}'.format(i, j)] = self.interloper_pdfs[i][j]
@@ -234,6 +232,16 @@ class InfallTimeOrbitPDF(_BaseOrbitPDF):
         super().__init__(cfg=cfg)
 
         return
+
+
+    def init_qbins(self):
+        with h5py.File(self.cfg.orbitfile, 'r') as f:
+            self.sfs = np.array(f['config/scales'])
+            self.qbins = np.concatenate((
+                np.array([self.sfs[0] - .5 * (self.sfs[1] - self.sfs[0])]),
+                self.sfs[:-1] + 0.5 * np.diff(self.sfs),
+                np.array([self.sfs[-1] + .5 * (self.sfs[-1] - self.sfs[-2])])
+            ))
 
 
     def calculate_q(self, sat, cluster):

@@ -9,7 +9,7 @@ setup(
     author_email='koman@astro.rug.nl',
     license='',
     packages=['orbitpdf'],
-    install_requires=['numpy', 'astropy', 'h5py'],
+    install_requires=['numpy', 'astropy', 'h5py', 'pathos'],
     include_package_data=True,
     zip_safe=False
 )
