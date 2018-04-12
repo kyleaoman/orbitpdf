@@ -4,7 +4,6 @@ import astropy.units as U
 from pathos.multiprocessing import ProcessPool
 import itertools
 import os
-import copy
 from ._util import _log
 
 import read_tree
