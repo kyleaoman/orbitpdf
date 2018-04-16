@@ -3,9 +3,10 @@ import h5py
 import astropy.units as U
 import itertools
 import os
-from ._util import _log
+from functools import reduce
 from pathos.multiprocessing import ProcessPool
 
+from ._util import _log
 import read_tree
 
 def _get_superparent(halo):
@@ -310,7 +311,6 @@ class Orbits(object):
 
 #called by parallel function, keep outside class
 def _extract_cluster_arrays(cluster_branch, h0=None):
-
     data = {}
 
     data['ids'] = [halo.id if halo is not None else -1 for halo in cluster_branch]
@@ -348,6 +348,7 @@ def _extract_cluster_arrays(cluster_branch, h0=None):
     data['vzs'] = [halo.vel[2] if halo is not None else np.nan for halo in cluster_branch]
 
     return data
+
 
 def _extract_interloper_arrays(halo, is_near, h0=None):
 
@@ -415,7 +416,9 @@ def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None):
 #parallel function: must be outside class, prefer simple arguments
 def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
 
-    _log('  processing file', infile.split('/')[-1])
+    print('start', infile)
+
+    out_arrays = []
 
     read_tree.read_tree(infile)
     all_halos = read_tree.all_halos
@@ -423,16 +426,14 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
 
     nsnaps = len(scales) - skipsnaps
 
-    out_arrays = []
-
     for halo in halo_tree.halo_lists[skipsnaps].halos:
 
-        if halo.parent is not None: #centrals only
+        if halo.parent is not None: #centrals only                                                      
             continue
 
-        if (halo.mvir / h0 > m_max_cluster.value) or \
-           (halo.mvir / h0 < m_min_cluster.value):
-            continue
+            if (halo.mvir / h0 > m_max_cluster.value) or \
+               (halo.mvir / h0 < m_min_cluster.value):
+                continue
 
         cluster_branch = []
 
