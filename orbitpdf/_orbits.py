@@ -65,17 +65,21 @@ class Orbits(object):
         _log('INTERLOPER REDUCTION')
         all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
         listdict_merge = lambda d1, d2: {
-            d1.keys()[0]: dict(
-                (
-                    k, 
-                    d1[d1.keys()[0]].get(k, []) + d2[d2.keys()[0]].get(k, [])
-                ) for k in set(d1[d1.keys()[0]]).union(d2[d2.keys()[0]])
-            )
+            nid: dict(
+                (k, d1.get(nid, dict()).get(k, list()) + d2.get(nid, dict()).get(k, list()))
+                for k in set(d1.get(nid, dict()).keys()).union(d2.get(nid, dict()).keys())
+            ) for nid in set(d1.keys()).union(d2.keys())
         }
-        unique_keys = np.unique([aoa.keys()[0] for aoa in all_out_arrays])
+
+        #each oa has only one key so indexing is safe:
+        keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
+        unique_keys = np.unique(keylist)
         for progress, k in enumerate(unique_keys):
-            _log(' ', progress, '/', len(unique_keys))
-            kis = np.flatnonzero(np.array([aoa.keys()[0] for aoa in all_out_arrays]) == k)
+            if progress % 1000 == 0:
+                _log(' ', progress, '/', len(unique_keys))
+            #recompute keylist each iteration since we're deleting items
+            keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
+            kis = np.flatnonzero(keylist == k)
             all_out_arrays[kis[0]] = reduce(listdict_merge, np.array(all_out_arrays)[kis])
             for ki in kis[1:][::-1]:
                 del all_out_arrays[ki]
@@ -95,7 +99,7 @@ class Orbits(object):
         ##But doing this in parallel requires blocking, which I haven't figured out.
         for infile in self.infiles:
             _log('ORBIT SEARCH')
-            out_arrays = self._process_orbits(infile, **self.cfg)
+            out_arrays = _process_orbits(infile, **self.cfg)
             with h5py.File(self.cfg.outfile, 'a') as f:
                 _log('ORBIT OUTPUT')
                 for progress, out_array in enumerate(out_arrays):
@@ -117,7 +121,7 @@ class Orbits(object):
                            range(self.cfg.ndivs)
                    )]
         infiles = [infile for infile in infiles if os.path.exists(infile)]
-        self.infiles = infiles[:4]
+        self.infiles = infiles
 
         return
 
@@ -533,7 +537,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
     return out_arrays
 
 #parallel function: must be outside class, prefer simple arguments
-def _process_orbits(infile, skipsnaps=None, h0=None, lbox=None, m_min_satellite=None,\
+def _process_orbits(infile, scales=None, skipsnaps=None, h0=None, lbox=None, m_min_satellite=None,\
                     m_max_satellite=None, m_min_cluster=None, m_max_cluster=None, **kwargs):
 
     _log('  processing file', infile.split('/')[-1])
