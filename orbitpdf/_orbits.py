@@ -66,35 +66,43 @@ class Orbits(object):
         _log('INTERLOPER SEARCH')
         target_kwargs = dict(self.cfg) #must not put 'self' in the lambda, but this is ok
         target = lambda infile: _process_interlopers(infile, **target_kwargs)
-        pool = ProcessPool(ncpus = min(self.cfg.ncpu, len(self.infiles)))
-        all_out_arrays = pool.map(target, self.infiles)
-
-        _log('INTERLOPER REDUCTION')
-        all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
-        listdict_merge = lambda d1, d2: {
-            nid: dict(
-                (k, d1.get(nid, dict()).get(k, list()) + d2.get(nid, dict()).get(k, list()))
-                for k in set(d1.get(nid, dict()).keys()).union(d2.get(nid, dict()).keys())
-            ) for nid in set(d1.keys()).union(d2.keys())
-        }
-        #each oa has only one key so indexing is safe:
-        keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
-        unique_keys = np.unique(keylist)
-        for progress, k in enumerate(unique_keys):
-            if progress % 1000 == 0:
-                _log(' ', progress, '/', len(unique_keys))
-            #recompute keylist each iteration since we're deleting items
+        if self.cfg.ncpu > 1:
+            pool = ProcessPool(ncpus = min(self.cfg.ncpu, len(self.infiles)))
+            all_out_arrays = pool.map(target, self.infiles)
+            _log('INTERLOPER REDUCTION')
+            all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
+            listdict_merge = lambda d1, d2: {
+                nid: dict(
+                    (k, d1.get(nid, dict()).get(k, list()) + d2.get(nid, dict()).get(k, list()))
+                    for k in set(d1.get(nid, dict()).keys()).union(d2.get(nid, dict()).keys())
+                ) for nid in set(d1.keys()).union(d2.keys())
+            }
+            #each oa has only one key so indexing is safe:
             keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
-            kis = np.flatnonzero(keylist == k)
-            all_out_arrays[kis[0]] = reduce(listdict_merge, np.array(all_out_arrays)[kis])
-            for ki in kis[1:][::-1]:
-                del all_out_arrays[ki]
-        all_out_arrays = {k: v for all_out_array in all_out_arrays for k, v in all_out_array.items()}
-
-        _log('INTERLOPER OUTPUT')
-        with h5py.File(self.cfg.outfile, 'a') as f:
-            for cluster_id, interlopers in all_out_arrays.items():
-                self._write_interlopers(f, cluster_id, interlopers)
+            unique_keys = np.unique(keylist)
+            for progress, k in enumerate(unique_keys):
+                if progress % 1000 == 0:
+                    _log(' ', progress, '/', len(unique_keys))
+                #recompute keylist each iteration since we're deleting items
+                keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
+                kis = np.flatnonzero(keylist == k)
+                all_out_arrays[kis[0]] = reduce(listdict_merge, np.array(all_out_arrays)[kis])
+                for ki in kis[1:][::-1]:
+                    del all_out_arrays[ki]
+            all_out_arrays = {k: v \
+                              for all_out_array in all_out_arrays \
+                              for k, v in all_out_array.items()}
+            _log('INTERLOPER OUTPUT')
+            with h5py.File(self.cfg.outfile, 'a') as f:
+                for cluster_id, interlopers in all_out_arrays.items():
+                    self._write_interlopers(f, cluster_id, interlopers)
+        else:
+            for infile in self.infiles:
+                all_out_arrays = target(infile)
+                _log('INTERLOPER OUTPUT (PARTIAL)')
+                with h5py.File(self.cfg.outfile, 'a') as f:
+                    for cluster_id, interlopers in all_out_arrays.items():
+                        self._write_interlopers(f, cluster_id, interlopers)
 
         return
 
