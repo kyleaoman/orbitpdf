@@ -39,27 +39,34 @@ class Orbits(object):
     def cluster_search(self):
 
         _log('CLUSTER SEARCH')
-        pool = ProcessPool(nodes = min(self.cfg.ncpu, len(self.infiles)))
         target_kwargs = dict(self.cfg)
         target = lambda infile: _process_clusters(infile, **target_kwargs)
-        all_out_arrays = pool.map(target, self.infiles)
+        if self.cfg.ncpu > 1:
+            pool = ProcessPool(nodes = min(self.cfg.ncpu, len(self.infiles)))
+            all_out_arrays = pool.map(target, self.infiles)
+            _log('CLUSTER REDUCTION')
+            all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
 
-        _log('CLUSTER REDUCTION')
-        all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
+            _log('CLUSTER OUTPUT')
+            with h5py.File(self.cfg.outfile, 'a') as f:
+                for out_array in all_out_arrays:
+                    self._write_cluster(f, out_array)
+        else:
+             for infile in self.infiles:
+                 all_out_arrays = target(infile)
+                 _log('CLUSTER OUTPUT (PARTIAL)')
+                 with h5py.File(self.cfg.outfile, 'a') as f:
+                     for out_array in all_out_arrays:
+                         self._write_cluster(f, out_array)
 
-        _log('CLUSTER OUTPUT')
-        with h5py.File(self.cfg.outfile, 'a') as f:
-            for out_array in all_out_arrays:
-                self._write_cluster(f, out_array)
-                
         return
 
     def interloper_search(self):
 
         _log('INTERLOPER SEARCH')
-        pool = ProcessPool(ncpus = min(self.cfg.ncpu, len(self.infiles)))
         target_kwargs = dict(self.cfg) #must not put 'self' in the lambda, but this is ok
         target = lambda infile: _process_interlopers(infile, **target_kwargs)
+        pool = ProcessPool(ncpus = min(self.cfg.ncpu, len(self.infiles)))
         all_out_arrays = pool.map(target, self.infiles)
 
         _log('INTERLOPER REDUCTION')
@@ -70,7 +77,6 @@ class Orbits(object):
                 for k in set(d1.get(nid, dict()).keys()).union(d2.get(nid, dict()).keys())
             ) for nid in set(d1.keys()).union(d2.keys())
         }
-
         #each oa has only one key so indexing is safe:
         keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
         unique_keys = np.unique(keylist)
@@ -89,7 +95,7 @@ class Orbits(object):
         with h5py.File(self.cfg.outfile, 'a') as f:
             for cluster_id, interlopers in all_out_arrays.items():
                 self._write_interlopers(f, cluster_id, interlopers)
-        
+
         return
 
     def orbit_search(self):
