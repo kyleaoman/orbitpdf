@@ -191,7 +191,7 @@ class _BaseOrbitPDF(object):
             )).T
             orbit_pdf, edges = np.histogramdd(
                 hist_input, 
-                bins=(self.cfg.vbins, self.cfg.rbins, self.cfg.qbins)
+                bins=(self.cfg.vbins, self.cfg.rbins, self.qbins)
             )
             self.orbit_pdfs[i][j] = orbit_pdf
 
