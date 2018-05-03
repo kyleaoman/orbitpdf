@@ -32,7 +32,6 @@ class Orbits(object):
         self.cfg = cfg
         self.cfg.scales = np.loadtxt(self.cfg.scalefile, unpack=True, usecols=[1])
         self._find_files()
-        self._write_headers()
             
         return
 
@@ -139,7 +138,10 @@ class Orbits(object):
 
         return
 
-    def _write_headers(self):
+    def newfile(self, overwrite=False):
+        if os.path.exists(self.cfg.outfile) and (overwrite == False):
+            raise IOError("Orbit.newfile: File exists and overwrite == False.")
+            return
         _log('HEADER OUTPUT')
         with h5py.File(self.cfg.outfile, 'w') as f:
             f.create_group('clusters')
