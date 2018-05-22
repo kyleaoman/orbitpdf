@@ -9,6 +9,8 @@ from pathos.multiprocessing import ProcessPool
 from ._util import _log
 import read_tree
 
+libver = 'latest' #sacrifice backwards-compatibility for speed in hdf5 writes
+
 def _get_superparent(halo):
 
     if halo is None:
@@ -47,14 +49,14 @@ class Orbits(object):
             all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
 
             _log('CLUSTER OUTPUT')
-            with h5py.File(self.cfg.outfile, 'a') as f:
+            with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                 for out_array in all_out_arrays:
                     self._write_cluster(f, out_array)
         else:
              for infile in self.infiles:
                  all_out_arrays = target(infile)
                  _log('CLUSTER OUTPUT (PARTIAL)')
-                 with h5py.File(self.cfg.outfile, 'a') as f:
+                 with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                      for out_array in all_out_arrays:
                          self._write_cluster(f, out_array)
 
@@ -92,14 +94,14 @@ class Orbits(object):
                               for all_out_array in all_out_arrays \
                               for k, v in all_out_array.items()}
             _log('INTERLOPER OUTPUT')
-            with h5py.File(self.cfg.outfile, 'a') as f:
+            with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                 for cluster_id, interlopers in all_out_arrays.items():
                     self._write_interlopers(f, cluster_id, interlopers)
         else:
             for infile in self.infiles:
                 all_out_arrays = target(infile)
                 _log('INTERLOPER OUTPUT (PARTIAL)')
-                with h5py.File(self.cfg.outfile, 'a') as f:
+                with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                     for cluster_id, interlopers in all_out_arrays.items():
                         self._write_interlopers(f, cluster_id, interlopers)
 
@@ -113,7 +115,7 @@ class Orbits(object):
         for infile in self.infiles:
             _log('ORBIT SEARCH')
             out_arrays = _process_orbits(infile, **self.cfg)
-            with h5py.File(self.cfg.outfile, 'a') as f:
+            with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                 _log('ORBIT OUTPUT')
                 for progress, out_array in enumerate(out_arrays):
                     if (progress % 1000) == 0:
@@ -134,6 +136,8 @@ class Orbits(object):
                            range(self.cfg.ndivs)
                    )]
         infiles = [infile for infile in infiles if os.path.exists(infile)]
+        if len(infiles) == 0:
+            raise IOError('Orbits._find_files: No input files found.')
         self.infiles = infiles
 
         return
@@ -143,7 +147,7 @@ class Orbits(object):
             raise IOError("Orbit.newfile: File exists and overwrite == False.")
             return
         _log('HEADER OUTPUT')
-        with h5py.File(self.cfg.outfile, 'w') as f:
+        with h5py.File(self.cfg.outfile, 'w', libver=libver) as f:
             f.create_group('clusters')
             g = f.create_group('config')
             for key, value in self.cfg.items():
@@ -436,7 +440,7 @@ def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None):
 #parallel function: must be outside class, prefer simple arguments
 def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
 
-    print('start', infile)
+    _log('start', infile)
 
     out_arrays = []
 
@@ -451,9 +455,9 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
         if halo.parent is not None: #centrals only                                                      
             continue
 
-            if (halo.mvir / h0 > m_max_cluster.value) or \
-               (halo.mvir / h0 < m_min_cluster.value):
-                continue
+        if (halo.mvir / h0 > m_max_cluster.value) or \
+           (halo.mvir / h0 < m_min_cluster.value):
+            continue
 
         cluster_branch = []
 
@@ -491,7 +495,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
     cluster_rvirs = []
     cluster_vrmss = []
 
-    with h5py.File(outfile, 'r') as f:
+    with h5py.File(outfile, 'r', libver=libver) as f:
 
         for cluster_key, cluster in f['clusters'].items():
 
