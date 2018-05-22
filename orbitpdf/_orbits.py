@@ -438,21 +438,20 @@ def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None):
     return data
 
 #parallel function: must be outside class, prefer simple arguments
-def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
+def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, m_max_cluster=None, m_min_cluster=None, **kwargs):
 
     _log('start', infile)
 
     out_arrays = []
 
     read_tree.read_tree(infile)
+    _log('read complete', infile)
     all_halos = read_tree.all_halos
     halo_tree = read_tree.halo_tree
 
     nsnaps = len(scales) - skipsnaps
-
     for halo in halo_tree.halo_lists[skipsnaps].halos:
-
-        if halo.parent is not None: #centrals only                                                      
+        if halo.parent is not None: #centrals only
             continue
 
         if (halo.mvir / h0 > m_max_cluster.value) or \
@@ -473,7 +472,7 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, **kwargs):
                 cluster_branch.append(cluster_branch[-1].prog)
 
         cluster_branch = cluster_branch[::-1]
-
+        
         out_arrays.append(_extract_cluster_arrays(cluster_branch, h0=h0))
 
     read_tree.delete_tree()
