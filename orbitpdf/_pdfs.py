@@ -206,7 +206,7 @@ class _BaseOrbitPDF(object):
             self.interloper_pdfs[i][j] = interloper_pdf
 
     def write(self):
-        for k, v in list(self.statistics.items()):
+        for k, v in self.statistics.items():
             print(k, v)
 
         with h5py.File(self.cfg.pdfsfile, 'w') as f:
