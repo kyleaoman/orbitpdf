@@ -510,7 +510,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
     cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
     cluster_vrmss = np.array(cluster_vrmss, dtype=np.float)
 
-    _log('  processing file', infile.split('/')[-1])
+    _log('processing file', infile.split('/')[-1])
 
     read_tree.read_tree(infile)
     all_halos = read_tree.all_halos
