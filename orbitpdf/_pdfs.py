@@ -13,6 +13,7 @@ class _BaseOrbitPDF(object):
         xyz[xyz > self.cfg.lbox.value / 2.] -= self.cfg.lbox.value
         return xyz
 
+
     def delta_RV(self, sat, cluster):
         rel_xyz = self.wrapbox(sat['xyz'][-1] - cluster['xyz'][-1])
         return (
@@ -228,11 +229,8 @@ class _BaseOrbitPDF(object):
 class InfallTimeOrbitPDF(_BaseOrbitPDF):
 
     def __init__(self, cfg=None):
-        
         super().__init__(cfg=cfg)
-
         return
-
 
     def init_qbins(self):
         with h5py.File(self.cfg.orbitfile, 'r') as f:
@@ -242,15 +240,29 @@ class InfallTimeOrbitPDF(_BaseOrbitPDF):
                 self.sfs[:-1] + 0.5 * np.diff(self.sfs),
                 np.array([self.sfs[-1] + .5 * (self.sfs[-1] - self.sfs[-2])])
             ))
-
+            return
 
     def calculate_q(self, sat, cluster):
-        
         i_infall = np.argmax(
-            np.logical_and(np.array(sat['sp_is_fpp']), \
+            np.logical_and(np.array(sat['sp_is_fpp']),
                            np.array(sat['superparent/ids']) > 0)
         )
-        
         return self.sfs[i_infall]
-        
-        
+
+
+class RperiOrbitPDF(_BaseOrbitPDF):
+    
+    def __init__(self, cfg=None):
+        super().__init__(cfg=cfg)
+        return
+
+    def init_qbins(self):
+        self.qbins = np.linspace(0, 2.5, 51)
+        return
+
+    def calculate_q(self, sat, cluster):
+        rel_xyz = self.wrapbox(
+            np.array(sat['xyz']) 
+            - np.array(cluster['xyz'])
+        ) / (1.E-3 * cluster['rvir'][-1])
+        return np.sqrt(np.nanmin(np.sum(np.power(rel_xyz, 2), axis=1)))
