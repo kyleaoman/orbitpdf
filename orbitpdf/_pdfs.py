@@ -174,10 +174,12 @@ class _BaseOrbitPDF(object):
 
                         more_interloper_rs, more_interloper_vs = self.delta_RV_interlopers(cluster)
                         self.interloper_rss[clustermass_bin][satmass_bin] = np.concatenate(
-                            (self.interloper_rss[clustermass_bin][satmass_bin], more_interloper_rs)
+                            (self.interloper_rss[clustermass_bin][satmass_bin], 
+                             more_interloper_rs[select_interlopres])
                         )
                         self.interloper_vss[clustermass_bin][satmass_bin] = np.concatenate(
-                            (self.interloper_vss[clustermass_bin][satmass_bin], more_interloper_vs)
+                            (self.interloper_vss[clustermass_bin][satmass_bin],
+                             more_interloper_vs[select_interlopers])
                         )
 
         return
