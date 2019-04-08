@@ -166,7 +166,7 @@ class Orbits(object):
 
     def _write_cluster(self, f, data):
 
-        g = f.create_group('clusters/'+str(data['ids'][-1]))
+        g = f.create_group('clusters/'+str(data['ids'][-1 - self.cfg.skipmore_for_select]))
         g.create_group('satellites')
         g.create_group('interlopers')
 
@@ -252,7 +252,8 @@ class Orbits(object):
 
     def _write_satellite(self, f, data):
 
-        g = f['clusters/'+str(data['cluster_id'])+'/satellites'].create_group(str(data['ids'][-1]))
+        g = f['clusters/'+str(data['cluster_id'])+'/satellites'].create_group(
+            str(data['ids'][-1 - self.cfg.skipmore_for_select]))
 
         g['ids'] = np.array(data['ids'], dtype=np.int)
         g['ids'].attrs['units'] = '-'
@@ -391,11 +392,11 @@ def _extract_interloper_arrays(halo, is_near, h0=None):
 
     return {k: data for k in is_near}
 
-def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None):
+def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None, skipmore_for_select=None):
 
     data = {}
 
-    data['cluster_id'] = _get_superparent(halo_branch[-1]).id
+    data['cluster_id'] = _get_superparent(halo_branch[-1 - skipmore_for_select]).id
 
     data['ids'] = [halo.id if halo is not None else -1 for halo in halo_branch]
     data['mvirs'] = [halo.mvir / h0 if halo is not None else np.nan for halo in halo_branch]
