@@ -438,7 +438,7 @@ def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None):
     return data
 
 #parallel function: must be outside class, prefer simple arguments
-def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, m_max_cluster=None, m_min_cluster=None, **kwargs):
+def _process_clusters(infile, scales=None, skipsnaps=None, skipmore_for_select=None, h0=None, m_max_cluster=None, m_min_cluster=None, **kwargs):
 
     _log('start', infile)
 
@@ -449,8 +449,8 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, m_max_cluste
     all_halos = read_tree.all_halos
     halo_tree = read_tree.halo_tree
 
-    nsnaps = len(scales) - skipsnaps
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
+    nsnaps = len(scales) - skipsnaps - skipmore_for_select
+    for halo in halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos:
         if halo.parent is not None: #centrals only
             continue
 
@@ -472,6 +472,15 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, m_max_cluste
                 cluster_branch.append(cluster_branch[-1].prog)
 
         cluster_branch = cluster_branch[::-1]
+
+        for level in range(skipmore_for_select):
+
+            if cluster_branch[-1] is None:
+                cluster_branch.append(None)
+
+            else:
+                cluster_branch.append(cluster_branch[-1].desc)
+                
         
         out_arrays.append(_extract_cluster_arrays(cluster_branch, h0=h0))
 
@@ -480,7 +489,8 @@ def _process_clusters(infile, scales=None, skipsnaps=None, h0=None, m_max_cluste
     return out_arrays
 
 #parallel function: must be outside class, prefer simple arguments
-def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=None,\
+def _process_interlopers(infile, outfile=None, skipsnaps=None, skipmore_for_select=None, \
+                         h0=None, lbox=None,\
                          m_min_satellite=None, m_max_satellite=None, interloper_dR=None,\
                          interloper_dV=None, **kwargs):
 
@@ -498,11 +508,11 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
 
         for cluster_key, cluster in f['clusters'].items():
 
-            cluster_ids.append(cluster['ids'][-1 - skipsnaps])
-            cluster_xyzs.append(cluster['xyz'][-1 - skipsnaps])
-            cluster_vzs.append(cluster['vxyz'][-1 - skipsnaps, 2])
-            cluster_rvirs.append(cluster['rvir'][-1 - skipsnaps])
-            cluster_vrmss.append(cluster['vrms'][-1 - skipsnaps])
+            cluster_ids.append(cluster['ids'][-1 - skipmore_for_select])
+            cluster_xyzs.append(cluster['xyz'][-1 - skipmore_for_select])
+            cluster_vzs.append(cluster['vxyz'][-1 - skipmore_for_select, 2])
+            cluster_rvirs.append(cluster['rvir'][-1 - skipmore_for_select])
+            cluster_vrmss.append(cluster['vrms'][-1 - skipmore_for_select])
 
     cluster_ids = np.array(cluster_ids, dtype=np.long)
     cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
@@ -518,7 +528,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
 
     out_arrays = []
 
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
+    for halo in halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos:
 
         if (halo.mvir / h0 > m_max_satellite.value) or \
            (halo.mvir / h0 < m_min_satellite.value):
@@ -556,7 +566,8 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None, h0=None, lbox=Non
     return out_arrays
 
 #parallel function: must be outside class, prefer simple arguments
-def _process_orbits(infile, scales=None, skipsnaps=None, h0=None, lbox=None, m_min_satellite=None,\
+def _process_orbits(infile, scales=None, skipsnaps=None, skipmore_for_select=None, \
+                    h0=None, lbox=None, m_min_satellite=None,\
                     m_max_satellite=None, m_min_cluster=None, m_max_cluster=None, **kwargs):
 
     _log('  processing file', infile.split('/')[-1])
@@ -565,11 +576,11 @@ def _process_orbits(infile, scales=None, skipsnaps=None, h0=None, lbox=None, m_m
     all_halos = read_tree.all_halos
     halo_tree = read_tree.halo_tree
 
-    nsnaps = len(scales) - skipsnaps
+    nsnaps = len(scales) - skipsnaps - skipmore_for_select
 
     out_arrays = []
 
-    for halo in halo_tree.halo_lists[skipsnaps].halos:
+    for halo in halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos:
 
         if (halo.mvir / h0 > m_max_satellite.value) or \
            (halo.mvir / h0 < m_min_satellite.value):
@@ -603,6 +614,14 @@ def _process_orbits(infile, scales=None, skipsnaps=None, h0=None, lbox=None, m_m
 
         halo_branch = halo_branch[::-1]
         superparent_branch = superparent_branch[::-1]
+
+        for level in range(skipmore_for_select):
+            if halo_branch[-1] is None:
+                halo_branch.append(None)
+                superparent_branch.append(None)
+            else:
+                halo_branch.append(halo_branch[-1].desc)
+                superparent_branch.append(_get_superparent(halo_branch[-1]))
 
         out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, h0=h0))
 
