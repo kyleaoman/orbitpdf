@@ -272,6 +272,7 @@ class RperiOrbitPDF(_BaseOrbitPDF):
 
 class PeriTimeOrbitPDF(_BaseOrbitPDF):
 
+    #This class completely untested so far
     def __init__(self, cfg=None):
         super().__init__(cfg=cfg)
         return
@@ -287,4 +288,16 @@ class PeriTimeOrbitPDF(_BaseOrbitPDF):
             return
 
     def calculate_q(self, sat, cluster):
-        return  # implement me!
+        rel_xyz = self.wrapbox(
+            np.array(sat['xyz']) 
+            - np.array(cluster['xyz'])
+        ) / (1.E-3 * cluster['rvir'][-1])
+        rel_r = np.sqrt(np.sum(np.power(rel_xyz, 2), axis=0))
+        minima = np.logical_and(
+            np.r_[1, rel_r[1:] < rel_r[:-1]],
+            np.r_[rel_r[:-1] < rel_r[1:], 1]
+        )
+        minima[-1] = False
+        rcut = np.max(self.cfg.rbins)
+        minima[rel_r > rcut] = False
+        return np.min(self.sfs[minima])
