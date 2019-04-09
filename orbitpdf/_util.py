@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 def _log(*logmsgs):
 
         T = datetime.now()

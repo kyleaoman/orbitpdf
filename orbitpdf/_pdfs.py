@@ -2,7 +2,8 @@ import h5py
 import numpy as np
 from itertools import product
 from ._util import _log
-from abc import ABCMeta, abstractmethod            
+from abc import ABCMeta, abstractmethod
+
 
 class _BaseOrbitPDF(object):
 
@@ -13,20 +14,21 @@ class _BaseOrbitPDF(object):
         xyz[xyz > self.cfg.lbox.value / 2.] -= self.cfg.lbox.value
         return xyz
 
-
     def delta_RV(self, sat, cluster):
         rel_xyz = self.wrapbox(sat['xyz'][-1] - cluster['xyz'][-1])
         return (
-            np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) / (1.E-3 * cluster['rvir'][-1]), 
-            np.abs(sat['vxyz'][-1, 2] - cluster['vxyz'][-1, 2] +\
+            np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) /
+            (1.E-3 * cluster['rvir'][-1]),
+            np.abs(sat['vxyz'][-1, 2] - cluster['vxyz'][-1, 2] +
                    100.0 * self.cfg.h0 * rel_xyz[2]) / cluster['vrms'][-1]
         )
 
     def delta_RV_interlopers(self, cluster):
         rel_xyz = self.wrapbox(cluster['interlopers/xyz'] - cluster['xyz'][-1])
         return (
-            np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) / (1.E-3 * cluster['rvir'][-1]), 
-            np.abs(cluster['interlopers/vxyz'][:, 2] - cluster['vxyz'][-1, 2] +\
+            np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) /
+            (1.E-3 * cluster['rvir'][-1]),
+            np.abs(cluster['interlopers/vxyz'][:, 2] - cluster['vxyz'][-1, 2] +
                    100.0 * self.cfg.h0 * rel_xyz[:, 2]) / cluster['vrms'][-1]
         )
 
@@ -40,31 +42,31 @@ class _BaseOrbitPDF(object):
         self.init_qbins()
 
         self.orbit_rss = [
-            [list() for n in range(self.Nsatbins)] 
+            [list() for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.orbit_vss = [
-            [list() for n in range(self.Nsatbins)] 
+            [list() for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.orbit_qss = [
-            [list() for n in range(self.Nsatbins)] 
+            [list() for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.interloper_rss = [
-            [np.array([]) for n in range(self.Nsatbins)] 
+            [np.array([]) for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.interloper_vss = [
-            [np.array([]) for n in range(self.Nsatbins)] 
+            [np.array([]) for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.orbit_pdfs = [
-            [list() for n in range(self.Nsatbins)] 
+            [list() for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
         self.interloper_pdfs = [
-            [list() for n in range(self.Nsatbins)] 
+            [list() for n in range(self.Nsatbins)]
             for N in range(self.Nclusterbins)
         ]
 
@@ -93,45 +95,68 @@ class _BaseOrbitPDF(object):
         _log('PROCESSING CLUSTER ORBITS')
 
         with h5py.File(self.cfg.orbitfile, 'r') as f:
-            for progress, (cluster_id, cluster) in enumerate(f['clusters'].items()):
+            for progress, (cluster_id, cluster) in enumerate(
+                    f['clusters'].items()):
 
-                _log('  processing orbits for cluster', progress + 1, '/', len(f['clusters']))
+                _log(
+                    '  processing orbits for cluster',
+                    progress + 1,
+                    '/',
+                    len(f['clusters'])
+                )
 
                 try:
                     no_interlopers = False
                     _log(
-                        '    Nsat', 
-                        len(cluster['satellites']), 
-                        'Ninterloper', 
+                        '    Nsat',
+                        len(cluster['satellites']),
+                        'Ninterloper',
                         len(cluster['interlopers/ids'])
                     )
                 except KeyError:
                     no_interlopers = True
 
-                if np.logical_or(cluster['mvir'][-1] < self.cfg.pdf_m_min_cluster[0].value, \
-                                 cluster['mvir'][-1] > self.cfg.pdf_m_max_cluster[-1].value):
-                    self.statistics['clustermass'] += len(cluster['satellites'])
+                if np.logical_or(
+                        cluster['mvir'][-1]
+                        < self.cfg.pdf_m_min_cluster[0].value,
+                        cluster['mvir'][-1]
+                        > self.cfg.pdf_m_max_cluster[-1].value
+                ):
+                    self.statistics['clustermass'] += \
+                        len(cluster['satellites'])
                     continue
                 else:
                     clustermass_bin = np.argmax(
-                        np.logical_and(cluster['mvir'][-1] > self.cfg.pdf_m_min_cluster.value, \
-                                       cluster['mvir'][-1] < self.cfg.pdf_m_max_cluster.value)
+                        np.logical_and(
+                            cluster['mvir'][-1]
+                            > self.cfg.pdf_m_min_cluster.value,
+                            cluster['mvir'][-1]
+                            < self.cfg.pdf_m_max_cluster.value
+                        )
                     )
 
                 for sat_id, sat in cluster['satellites'].items():
 
-                    if np.logical_or(sat['mvir'][-1] < self.cfg.pdf_m_min_satellite[0].value, \
-                                     sat['mvir'][-1] > self.cfg.pdf_m_max_satellite[-1].value):
+                    if np.logical_or(
+                            sat['mvir'][-1]
+                            < self.cfg.pdf_m_min_satellite[0].value,
+                            sat['mvir'][-1]
+                            > self.cfg.pdf_m_max_satellite[-1].value
+                    ):
                         self.statistics['satmass'] += 1
                         continue
                     else:
                         satmass_bin = np.argmax(
-                            np.logical_and(sat['mvir'][-1] > self.cfg.pdf_m_min_satellite.value, \
-                                           sat['mvir'][-1] < self.cfg.pdf_m_max_satellite.value)
+                            np.logical_and(
+                                sat['mvir'][-1]
+                                > self.cfg.pdf_m_min_satellite.value,
+                                sat['mvir'][-1]
+                                < self.cfg.pdf_m_max_satellite.value
+                            )
                         )
 
                     i_infall = np.argmax(
-                        np.logical_and(np.array(sat['sp_is_fpp']), \
+                        np.logical_and(np.array(sat['sp_is_fpp']),
                                        np.array(sat['superparent/ids']) > 0)
                     )
 
@@ -145,7 +170,6 @@ class _BaseOrbitPDF(object):
                         continue
 
                     r, v = self.delta_RV(sat, cluster)
-                    
                     q = self.calculate_q(sat, cluster)
 
                     if (r > self.cfg.rbins[-1]) or (v > self.cfg.vbins[-1]):
@@ -161,26 +185,35 @@ class _BaseOrbitPDF(object):
                 if not no_interlopers:
                     for satmass_bin in range(self.Nsatbins):
                         select_interlopers = np.logical_and(
-                            np.array(cluster['interlopers/mvir']) > self.cfg.resolution_cut.value,
+                            np.array(cluster['interlopers/mvir'])
+                            > self.cfg.resolution_cut.value,
                             np.logical_and(
-                                np.array(cluster['interlopers/mvir']) > \
-                                self.cfg.pdf_m_min_satellite[satmass_bin].value,
-                                np.array(cluster['interlopers/mvir']) < \
-                                self.cfg.pdf_m_max_satellite[satmass_bin].value
+                                np.array(cluster['interlopers/mvir'])
+                                > self.cfg.pdf_m_min_satellite[satmass_bin]
+                                .value,
+                                np.array(cluster['interlopers/mvir'])
+                                < self.cfg.pdf_m_max_satellite[satmass_bin]
+                                .value
                             )
                         )
 
-                        self.statistics['interlopercount'] += np.sum(select_interlopers)
+                        self.statistics['interlopercount'] += \
+                            np.sum(select_interlopers)
 
-                        more_interloper_rs, more_interloper_vs = self.delta_RV_interlopers(cluster)
-                        self.interloper_rss[clustermass_bin][satmass_bin] = np.concatenate(
-                            (self.interloper_rss[clustermass_bin][satmass_bin], 
-                             more_interloper_rs[select_interlopers])
-                        )
-                        self.interloper_vss[clustermass_bin][satmass_bin] = np.concatenate(
-                            (self.interloper_vss[clustermass_bin][satmass_bin],
-                             more_interloper_vs[select_interlopers])
-                        )
+                        more_interloper_rs, more_interloper_vs = \
+                            self.delta_RV_interlopers(cluster)
+                        self.interloper_rss[clustermass_bin][satmass_bin] = \
+                            np.concatenate((
+                                self.interloper_rss[clustermass_bin][
+                                    satmass_bin],
+                                more_interloper_rs[select_interlopers]
+                            ))
+                        self.interloper_vss[clustermass_bin][satmass_bin] = \
+                            np.concatenate((
+                                self.interloper_vss[clustermass_bin][
+                                    satmass_bin],
+                                more_interloper_vs[select_interlopers]
+                            ))
 
         return
 
@@ -193,17 +226,17 @@ class _BaseOrbitPDF(object):
                 self.orbit_qss[i][j]
             )).T
             orbit_pdf, edges = np.histogramdd(
-                hist_input, 
+                hist_input,
                 bins=(self.cfg.vbins, self.cfg.rbins, self.qbins)
             )
             self.orbit_pdfs[i][j] = orbit_pdf
 
             hist_input = np.vstack((
-                self.interloper_vss[i][j], 
+                self.interloper_vss[i][j],
                 self.interloper_rss[i][j]
             )).T
             interloper_pdf, edges = np.histogramdd(
-                hist_input, 
+                hist_input,
                 bins=(self.cfg.vbins, self.cfg.rbins)
             )
             self.interloper_pdfs[i][j] = interloper_pdf
@@ -216,9 +249,12 @@ class _BaseOrbitPDF(object):
             f['vbins'] = self.cfg.vbins
             f['rbins'] = self.cfg.rbins
             f['qbins'] = np.array(self.qbins)
-            for i, j in product(range(self.Nclusterbins), range(self.Nsatbins)):
-                f['orbit_pdf_{0:0d}_{1:0d}'.format(i, j)] = self.orbit_pdfs[i][j]
-                f['interloper_pdf_{0:0d}_{1:0d}'.format(i, j)] = self.interloper_pdfs[i][j]
+            for i, j in product(
+                    range(self.Nclusterbins), range(self.Nsatbins)):
+                f['orbit_pdf_{0:0d}_{1:0d}'.format(i, j)] = \
+                    self.orbit_pdfs[i][j]
+                f['interloper_pdf_{0:0d}_{1:0d}'.format(i, j)] = \
+                    self.interloper_pdfs[i][j]
 
             g = f.create_group('config')
             for key, value in self.cfg.items():
@@ -227,6 +263,7 @@ class _BaseOrbitPDF(object):
         _log('END')
 
         return
+
 
 class InfallTimeOrbitPDF(_BaseOrbitPDF):
 
@@ -253,7 +290,7 @@ class InfallTimeOrbitPDF(_BaseOrbitPDF):
 
 
 class RperiOrbitPDF(_BaseOrbitPDF):
-    
+
     def __init__(self, cfg=None):
         super().__init__(cfg=cfg)
         return
@@ -264,7 +301,7 @@ class RperiOrbitPDF(_BaseOrbitPDF):
 
     def calculate_q(self, sat, cluster):
         rel_xyz = self.wrapbox(
-            np.array(sat['xyz']) 
+            np.array(sat['xyz'])
             - np.array(cluster['xyz'])
         ) / (1.E-3 * cluster['rvir'][-1])
         return np.sqrt(np.nanmin(np.sum(np.power(rel_xyz, 2), axis=1)))
@@ -272,7 +309,7 @@ class RperiOrbitPDF(_BaseOrbitPDF):
 
 class PeriTimeOrbitPDF(_BaseOrbitPDF):
 
-    #This class completely untested so far
+    # This class completely untested so far
     def __init__(self, cfg=None):
         super().__init__(cfg=cfg)
         return
@@ -289,7 +326,7 @@ class PeriTimeOrbitPDF(_BaseOrbitPDF):
 
     def calculate_q(self, sat, cluster):
         rel_xyz = self.wrapbox(
-            np.array(sat['xyz']) 
+            np.array(sat['xyz'])
             - np.array(cluster['xyz'])
         ) / (1.E-3 * cluster['rvir'][-1])
         rel_r = np.sqrt(np.sum(np.power(rel_xyz, 2), axis=0))
