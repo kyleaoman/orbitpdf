@@ -268,3 +268,23 @@ class RperiOrbitPDF(_BaseOrbitPDF):
             - np.array(cluster['xyz'])
         ) / (1.E-3 * cluster['rvir'][-1])
         return np.sqrt(np.nanmin(np.sum(np.power(rel_xyz, 2), axis=1)))
+
+
+class PeriTimeOrbitPDF(_BaseOrbitPDF):
+
+    def __init__(self, cfg=None):
+        super().__init__(cfg=cfg)
+        return
+
+    def init_qbins(self):
+        with h5py.File(self.cfg.orbitfile, 'r') as f:
+            self.sfs = np.array(f['config/scales'])
+            self.qbins = np.concatenate((
+                np.array([self.sfs[0] - .5 * (self.sfs[1] - self.sfs[0])]),
+                self.sfs[:-1] + 0.5 * np.diff(self.sfs),
+                np.array([self.sfs[-1] + .5 * (self.sfs[-1] - self.sfs[-2])])
+            ))
+            return
+
+    def calculate_q(self, sat, cluster):
+        return  # implement me!
