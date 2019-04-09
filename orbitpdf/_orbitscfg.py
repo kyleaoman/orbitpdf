@@ -34,6 +34,8 @@ class OrbitsConfig(dict):
             raise AttributeError("Missing OrbitsConfig attributes (check OrbitsConfig.reqkeys).")
         if 'skipsnaps' not in self.keys():
             self.skipsnaps = 0
+        if 'skipmore_for_select' not in self.keys():
+            self.skipmore_for_select = 0
         if 'ncpu' not in self.keys():
             self.ncpu = 1
         if 'ndivs' not in self.keys():

@@ -395,7 +395,6 @@ def _extract_interloper_arrays(halo, is_near, h0=None):
 def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None, skipmore_for_select=None):
 
     data = {}
-
     data['cluster_id'] = _get_superparent(halo_branch[-1 - skipmore_for_select]).id
 
     data['ids'] = [halo.id if halo is not None else -1 for halo in halo_branch]
@@ -571,9 +570,10 @@ def _process_orbits(infile, scales=None, skipsnaps=None, skipmore_for_select=Non
                     h0=None, lbox=None, m_min_satellite=None,\
                     m_max_satellite=None, m_min_cluster=None, m_max_cluster=None, **kwargs):
 
-    _log('  processing file', infile.split('/')[-1])
-
+    _log('  processing file, reading', infile.split('/')[-1])
     read_tree.read_tree(infile)
+    _log('  read complete', infile.split('/')[-1])
+
     all_halos = read_tree.all_halos
     halo_tree = read_tree.halo_tree
 
@@ -624,7 +624,7 @@ def _process_orbits(infile, scales=None, skipsnaps=None, skipmore_for_select=Non
                 halo_branch.append(halo_branch[-1].desc)
                 superparent_branch.append(_get_superparent(halo_branch[-1]))
 
-        out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, h0=h0))
+        out_arrays.append(_extract_orbit_arrays(halo_branch, superparent_branch, h0=h0, skipmore_for_select=skipmore_for_select))
 
     read_tree.delete_tree()
 
