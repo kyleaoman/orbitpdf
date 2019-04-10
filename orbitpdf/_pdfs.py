@@ -4,6 +4,8 @@ from itertools import product
 from ._util import _log
 from abc import ABCMeta, abstractmethod
 
+np.seterr(all='ignore')
+
 
 class _BaseOrbitPDF(object):
 
@@ -77,6 +79,7 @@ class _BaseOrbitPDF(object):
             'accretionmass': 0,
             'norvbin': 0,
             'interlopercount': 0,
+            'qisnan': 0,
             'using': 0
         }
 
@@ -174,6 +177,10 @@ class _BaseOrbitPDF(object):
 
                     if (r > self.cfg.rbins[-1]) or (v > self.cfg.vbins[-1]):
                         self.statistics['norvbin'] += 1
+                        continue
+
+                    if np.isnan(q):
+                        self.statistics['qisnan'] += 1
                         continue
 
                     self.orbit_rss[clustermass_bin][satmass_bin].append(r)
@@ -309,7 +316,6 @@ class RperiOrbitPDF(_BaseOrbitPDF):
 
 class PeriTimeOrbitPDF(_BaseOrbitPDF):
 
-    # This class completely untested so far
     def __init__(self, cfg=None):
         super().__init__(cfg=cfg)
         return
@@ -329,7 +335,7 @@ class PeriTimeOrbitPDF(_BaseOrbitPDF):
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
         ) / (1.E-3 * cluster['rvir'][-1])
-        rel_r = np.sqrt(np.sum(np.power(rel_xyz, 2), axis=0))
+        rel_r = np.sqrt(np.sum(np.power(rel_xyz, 2), axis=1))
         minima = np.logical_and(
             np.r_[1, rel_r[1:] < rel_r[:-1]],
             np.r_[rel_r[:-1] < rel_r[1:], 1]
@@ -337,4 +343,12 @@ class PeriTimeOrbitPDF(_BaseOrbitPDF):
         minima[-1] = False
         rcut = np.max(self.cfg.rbins)
         minima[rel_r > rcut] = False
-        return np.min(self.sfs[minima])
+        if np.sum(minima) > 0:
+            return np.min(self.sfs[minima])
+        else: 
+            # no pericentre, e.g. circular orbit or 
+            # insufficient future time, in initial test
+            # this seems to be a small minority for
+            # reasonable choices
+            return np.nan
+        
