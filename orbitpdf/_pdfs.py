@@ -17,27 +17,33 @@ class _BaseOrbitPDF(object):
         return xyz
 
     def delta_RV(self, sat, cluster):
-        rel_xyz = self.wrapbox(sat['xyz'][-1] - cluster['xyz'][-1])
+        rel_xyz = self.wrapbox(sat['xyz'][self.iref]
+                               - cluster['xyz'][self.iref])
         return (
             np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) /
-            (1.E-3 * cluster['rvir'][-1]),
-            np.abs(sat['vxyz'][-1, 2] - cluster['vxyz'][-1, 2] +
-                   100.0 * self.cfg.h0 * rel_xyz[2]) / cluster['vrms'][-1]
+            (1.E-3 * cluster['rvir'][self.iref]),
+            np.abs(sat['vxyz'][self.iref, 2] - cluster['vxyz'][self.iref, 2] +
+                   100.0 * self.cfg.h0 * rel_xyz[2]) 
+            / cluster['vrms'][self.iref]
         )
 
     def delta_RV_interlopers(self, cluster):
-        rel_xyz = self.wrapbox(cluster['interlopers/xyz'] - cluster['xyz'][-1])
+        rel_xyz = self.wrapbox(cluster['interlopers/xyz'] -
+                               cluster['xyz'][self.iref])
         return (
             np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) /
-            (1.E-3 * cluster['rvir'][-1]),
-            np.abs(cluster['interlopers/vxyz'][:, 2] - cluster['vxyz'][-1, 2] +
-                   100.0 * self.cfg.h0 * rel_xyz[:, 2]) / cluster['vrms'][-1]
+            (1.E-3 * cluster['rvir'][self.iref]),
+            np.abs(cluster['interlopers/vxyz'][:, 2]
+                   - cluster['vxyz'][self.iref, 2] +
+                   100.0 * self.cfg.h0 * rel_xyz[:, 2])
+            / cluster['vrms'][self.iref]
         )
 
     def __init__(self, cfg=None):
 
         cfg._validate()
         self.cfg = cfg
+        self.iref = -1 - self.cfg.skipmore_for_select
         self.Nsatbins = len(self.cfg.pdf_m_min_satellite)
         self.Nclusterbins = len(self.cfg.pdf_m_min_cluster)
 
@@ -120,9 +126,9 @@ class _BaseOrbitPDF(object):
                     no_interlopers = True
 
                 if np.logical_or(
-                        cluster['mvir'][-1]
+                        cluster['mvir'][self.iref]
                         < self.cfg.pdf_m_min_cluster[0].value,
-                        cluster['mvir'][-1]
+                        cluster['mvir'][self.iref]
                         > self.cfg.pdf_m_max_cluster[-1].value
                 ):
                     self.statistics['clustermass'] += \
@@ -131,9 +137,9 @@ class _BaseOrbitPDF(object):
                 else:
                     clustermass_bin = np.argmax(
                         np.logical_and(
-                            cluster['mvir'][-1]
+                            cluster['mvir'][self.iref]
                             > self.cfg.pdf_m_min_cluster.value,
-                            cluster['mvir'][-1]
+                            cluster['mvir'][self.iref]
                             < self.cfg.pdf_m_max_cluster.value
                         )
                     )
@@ -141,9 +147,9 @@ class _BaseOrbitPDF(object):
                 for sat_id, sat in cluster['satellites'].items():
 
                     if np.logical_or(
-                            sat['mvir'][-1]
+                            sat['mvir'][self.iref]
                             < self.cfg.pdf_m_min_satellite[0].value,
-                            sat['mvir'][-1]
+                            sat['mvir'][self.iref]
                             > self.cfg.pdf_m_max_satellite[-1].value
                     ):
                         self.statistics['satmass'] += 1
@@ -151,9 +157,9 @@ class _BaseOrbitPDF(object):
                     else:
                         satmass_bin = np.argmax(
                             np.logical_and(
-                                sat['mvir'][-1]
+                                sat['mvir'][self.iref]
                                 > self.cfg.pdf_m_min_satellite.value,
-                                sat['mvir'][-1]
+                                sat['mvir'][self.iref]
                                 < self.cfg.pdf_m_max_satellite.value
                             )
                         )
@@ -310,7 +316,7 @@ class RperiOrbitPDF(_BaseOrbitPDF):
         rel_xyz = self.wrapbox(
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
-        ) / (1.E-3 * cluster['rvir'][-1])
+        ) / (1.E-3 * cluster['rvir'][self.iref])
         return np.sqrt(np.nanmin(np.sum(np.power(rel_xyz, 2), axis=1)))
 
 
@@ -334,7 +340,7 @@ class PeriTimeOrbitPDF(_BaseOrbitPDF):
         rel_xyz = self.wrapbox(
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
-        ) / (1.E-3 * cluster['rvir'][-1])
+        ) / (1.E-3 * cluster['rvir'][self.iref])
         rel_r = np.sqrt(np.sum(np.power(rel_xyz, 2), axis=1))
         minima = np.logical_and(
             np.r_[1, rel_r[1:] < rel_r[:-1]],
