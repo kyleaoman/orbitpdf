@@ -41,6 +41,8 @@ class OrbitPDF(object):
         cfg._validate()
         self.cfg = cfg
         self.iref = -1 - self.cfg.skipmore_for_select
+        with h5py.File(self.cfg.orbitfile, 'r') as f:
+            self.sfs = np.array(f['config/scales'])
 
         self.no_interlopers = None  # checked when processing orbits
 
@@ -50,10 +52,10 @@ class OrbitPDF(object):
         self.msatlist = []
         self.qlists = {k: [] for k in self.qkeys}
 
-        self.rlist_i = []
-        self.vlist_i = []
-        self.mhostlist_i = []
-        self.msatlist_i = []
+        self.rlist_i = np.array([])
+        self.vlist_i = np.array([])
+        self.mhostlist_i = np.array([])
+        self.msatlist_i = np.array([])
 
         self.statistics = {
             'clustermass': 0,
@@ -177,7 +179,7 @@ class OrbitPDF(object):
                     ))
                     self.msatlist_i = np.concatenate((
                         self.msatlist_i,
-                        cluster['interlopers/mvir'][self.iref]
+                        cluster['interlopers/mvir'][select_interlopers]
                     ))
         return
 
@@ -278,13 +280,17 @@ class OrbitPDF(object):
         # infall defined as crossing dR * Rvir
         # (non-evolving Rvir to avoid cluster growing and gaining sats
         # in strange places; recenter at merger might still be a bit odd)
-        i_infall = np.argwhere(np.logical_and(
-            rel_r[:-1] > self.cfg.interloper_dR,
-            rel_r[1:] < self.cfg.interloper_dR
-        )).flatten()[0]
-        mask = np.s_[i_infall: i_infall + 1]
-        retval['t_infall'] = \
-            np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
+        try:
+            i_infall = np.argwhere(np.logical_and(
+                rel_r[:-1] > self.cfg.interloper_dR,
+                rel_r[1:] < self.cfg.interloper_dR
+            )).flatten()[0]
+        except IndexError:
+            retval['t_infall'] = np.nan
+        else:
+            mask = np.s_[i_infall: i_infall + 1]
+            retval['t_infall'] = \
+                np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
 
         # CLOSEST APPROACH AND MAX SPEED SO FAR
         # closest recorded approach and speed up to present time
