@@ -434,13 +434,11 @@ def _extract_interloper_arrays(halo, is_near, h0=None):
     return {k: data for k in is_near}
 
 
-def _extract_orbit_arrays(halo_branch, superparent_branch, h0=None,
+def _extract_orbit_arrays(cluster_id, halo_branch, superparent_branch, h0=None,
                           skipmore_for_select=None):
 
     data = {}
-    data['cluster_id'] = _get_superparent(
-        halo_branch[-1 - skipmore_for_select]
-    ).id
+    data['cluster_id'] = cluster_id
 
     data['ids'] = [halo.id if halo is not None else -1
                    for halo in halo_branch]
@@ -638,10 +636,35 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
 
 
 # parallel function: must be outside class, prefer simple arguments
-def _process_orbits(infile, scales=None, skipsnaps=None,
+def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
                     skipmore_for_select=None, h0=None, lbox=None,
                     m_min_satellite=None, m_max_satellite=None,
-                    m_min_cluster=None, m_max_cluster=None, **kwargs):
+                    m_min_cluster=None, m_max_cluster=None, interloper_dR=None,
+                    **kwargs):
+
+    # read clusters here will happen for each parallel process, but would be
+    # copied for each process anyway, would need to explicitly set up a shared
+    # memory object to work around this
+    # note: placed here it gets destroyed when no longer needed
+
+    cluster_ids = []
+    cluster_xyzs = []
+    cluster_rvirs = []
+    cluster_mvirs = []
+
+    with h5py.File(outfile, 'r', libver=libver) as f:
+
+        for cluster_key, cluster in f['clusters'].items():
+
+            cluster_ids.append(cluster['ids'][-1 - skipmore_for_select])
+            cluster_xyzs.append(cluster['xyz'][-1 - skipmore_for_select])
+            cluster_rvirs.append(cluster['rvir'][-1 - skipmore_for_select])
+            cluster_mvirs.append(cluster['mvir'][-1 - skipmore_for_select])
+
+    cluster_ids = np.array(cluster_ids, dtype=np.long)
+    cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
+    cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
+    cluster_mvirs = np.array(cluster_mvirs, dtype=np.float)
 
     _log('  processing file, reading', infile.split('/')[-1])
     read_tree.read_tree(infile)
@@ -654,20 +677,30 @@ def _process_orbits(infile, scales=None, skipsnaps=None,
 
     out_arrays = []
 
-    for halo in halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos:
+    halo_list = halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos
 
+    for halo in halo_list:
+
+        # REVISE THIS TO BE MAX ALONG ORBIT?
         if (halo.mvir / h0 > m_max_satellite.value) or \
            (halo.mvir / h0 < m_min_satellite.value):
             continue
 
-        superparent = _get_superparent(halo)
-
-        if superparent is None:
+        xyz = np.array([
+            halo.pos[0] / h0,
+            halo.pos[1] / h0,
+            halo.pos[2] / h0
+        ], dtype=np.float)
+        D = xyz - cluster_xyzs
+        D[D > lbox.value / 2.] -= lbox.value
+        D[D < -lbox.value / 2.] += lbox.value
+        D *= 1.E3 / cluster_rvirs[:, np.newaxis]  # rvir in kpc
+        D = np.power(D, 2)
+        is_near = np.sum(D, axis=1) < np.power(interloper_dR, 2)
+        if np.sum(is_near) == 0:
             continue
-
-        if (superparent.mvir / h0 < m_min_cluster.value) or \
-           (superparent.mvir / h0 > m_max_cluster.value):
-            continue
+        # if multiple possible hosts pick most massive
+        host_id = cluster_ids[is_near][np.argmax(cluster_mvirs[is_near])]
 
         halo_branch = []
         superparent_branch = []
@@ -699,6 +732,7 @@ def _process_orbits(infile, scales=None, skipsnaps=None,
 
         out_arrays.append(
             _extract_orbit_arrays(
+                host_id,
                 halo_branch,
                 superparent_branch,
                 h0=h0,
