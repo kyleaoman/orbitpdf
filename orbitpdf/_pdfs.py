@@ -44,8 +44,6 @@ class OrbitPDF(object):
         with h5py.File(self.cfg.orbitfile, 'r') as f:
             self.sfs = np.array(f['config/scales'])
 
-        self.no_interlopers = None  # checked when processing orbits
-
         self.rlist = []
         self.vlist = []
         self.mhostlist = []
@@ -85,15 +83,24 @@ class OrbitPDF(object):
                 )
 
                 try:
-                    self.no_interlopers = False
+                    cluster['interlopers/ids']
+                except KeyError:
+                    no_interlopers = True
+                else:
+                    no_interlopers = False
+                if no_interlopers:
+                    _log(
+                        '    Nsat',
+                        len(cluster['satellites'])
+                    )
+                else:
                     _log(
                         '    Nsat',
                         len(cluster['satellites']),
                         'Ninterloper',
                         len(cluster['interlopers/ids'])
                     )
-                except KeyError:
-                    self.no_interlopers = True
+
 
                 if np.logical_or(
                         cluster['mvir'][self.iref]
@@ -147,7 +154,7 @@ class OrbitPDF(object):
 
                     self.statistics['using'] += 1
 
-                if not self.no_interlopers:
+                if not no_interlopers:
                     select_interlopers = np.logical_and(
                         np.array(cluster['interlopers/mvir'])
                         > self.cfg.resolution_cut.value,
@@ -209,7 +216,7 @@ class OrbitPDF(object):
                 g[k] = np.array(self.qlists[k])
                 g[k].attrs['unit'] = str(self.qunits[k])
                 g[k].attrs['desc'] = self.qdescs[k]
-            if not self.no_interlopers:
+            if self.statistics['interlopercount'] > 0:
                 g = f.create_group('interlopers')
                 g['R'] = np.array(self.rlist_i)
                 g['R'].attrs['unit'] = str(U.dimensionless_unscaled)
