@@ -16,25 +16,27 @@ class OrbitPDF(object):
     def delta_RV(self, sat, cluster):
         rel_xyz = self.wrapbox(sat['xyz'][self.iref]
                                - cluster['xyz'][self.iref])
-        return (
-            np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) /
-            (1.E-3 * cluster['rvir'][self.iref]),
-            np.abs(sat['vxyz'][self.iref, 2] - cluster['vxyz'][self.iref, 2] +
-                   100.0 * self.cfg.h0 * rel_xyz[2])
-            / cluster['vrms'][self.iref]
-        )
+        R = np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) \
+            / (1.E-3 * cluster['rvir'][self.iref])
+        V = (sat['vxyz'][self.iref, 2] - cluster['vxyz'][self.iref, 2] +
+             100.0 * self.cfg.h0 * rel_xyz[2]) / cluster['vrms'][self.iref]
+        if not self.cfg.signed_V:
+            V = np.abs(V)
+        return R, V
 
     def delta_RV_interlopers(self, cluster):
         rel_xyz = self.wrapbox(cluster['interlopers/xyz'] -
                                cluster['xyz'][self.iref])
-        return (
-            np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) /
-            (1.E-3 * cluster['rvir'][self.iref]),
-            np.abs(cluster['interlopers/vxyz'][:, 2]
-                   - cluster['vxyz'][self.iref, 2] +
-                   100.0 * self.cfg.h0 * rel_xyz[:, 2])
-            / cluster['vrms'][self.iref]
-        )
+        R = np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) \
+            / (1.E-3 * cluster['rvir'][self.iref])
+        V = (
+            cluster['interlopers/vxyz'][:, 2]
+            - cluster['vxyz'][self.iref, 2] +
+            100.0 * self.cfg.h0 * rel_xyz[:, 2]
+        ) / cluster['vrms'][self.iref]
+        if not self.cfg.signed_V:
+            V = np.abs(V)
+        return R, V
 
     def __init__(self, cfg=None):
 
@@ -140,7 +142,7 @@ class OrbitPDF(object):
                     r, v = self.delta_RV(sat, cluster)
 
                     if (r > self.cfg.interloper_dR) or \
-                       (v > self.cfg.interloper_dV):
+                       (np.abs(v) > self.cfg.interloper_dV):
                         self.statistics['norvbin'] += 1
                         continue
 

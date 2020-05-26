@@ -38,6 +38,8 @@ class OrbitPDFConfig(OrbitsConfig):
             self.vbins = np.linspace(0, 2.0, 101)
         if 'pdfsfile' not in self.keys():
             self.pdfsfile = 'pdfs_out.hdf5'
+        if 'signed_V' not in self.keys():
+            self.signed_V = False
 
         try:
             self['pdf_m_min_satellite'] = self['pdf_m_min_satellite'].to(
