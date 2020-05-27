@@ -16,26 +16,30 @@ class OrbitPDF(object):
     def delta_RV(self, sat, cluster):
         rel_xyz = self.wrapbox(sat['xyz'][self.iref]
                                - cluster['xyz'][self.iref])
+        rel_vxyz = sat['vxyz'][self.iref] - cluster['vxyz'][self.iref]
         R = np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) \
             / (1.E-3 * cluster['rvir'][self.iref])
-        V = (sat['vxyz'][self.iref, 2] - cluster['vxyz'][self.iref, 2] +
-             100.0 * self.cfg.h0 * rel_xyz[2]) / cluster['vrms'][self.iref]
-        if not self.cfg.signed_V:
-            V = np.abs(V)
+        V = np.abs(
+            rel_vxyz[2] + 100.0 * self.cfg.h0 * rel_xyz[2]
+        ) / cluster['vrms'][self.iref]
+        if self.cfg.signed_V:
+            sgn = np.sign(rel_xyz[2] * rel_vxyz[2])
+            V = sgn * V
         return R, V
 
     def delta_RV_interlopers(self, cluster):
         rel_xyz = self.wrapbox(cluster['interlopers/xyz'] -
                                cluster['xyz'][self.iref])
+        rel_vxyz = cluster['interlopers/vxyz'] \
+            - cluster['vxyz'][self.iref]
         R = np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) \
             / (1.E-3 * cluster['rvir'][self.iref])
-        V = (
-            cluster['interlopers/vxyz'][:, 2]
-            - cluster['vxyz'][self.iref, 2] +
-            100.0 * self.cfg.h0 * rel_xyz[:, 2]
+        V = np.abs(
+            rel_vxyz[:, 2] + 100.0 * self.cfg.h0 * rel_xyz[:, 2]
         ) / cluster['vrms'][self.iref]
-        if not self.cfg.signed_V:
-            V = np.abs(V)
+        if self.cfg.signed_V:
+            sgn = np.sign(rel_xyz[:, 2] * rel_vxyz[:, 2])
+            V = sgn * V
         return R, V
 
     def __init__(self, cfg=None):
