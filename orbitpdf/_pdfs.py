@@ -309,7 +309,7 @@ class OrbitPDF(object):
             retval['t_infall'] = \
                 np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
             retval['m_infall'] = \
-                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'])
+                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'][mask])
 
         # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
         # closest recorded approach and speed up to present time,
