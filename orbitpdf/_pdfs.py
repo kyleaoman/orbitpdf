@@ -256,7 +256,8 @@ class OrbitPDF(object):
         'r': 'dimensionless_unscaled',
         'v': 'dimensionless_unscaled',
         'r_min': 'dimensionless_unscaled',
-        'v_max': 'dimensionless_unscaled'
+        'v_max': 'dimensionless_unscaled',
+        'm_max': 'solMass'
     }
     qdescs = {
         't_infall': 'Scale factor at first infall into final host'
@@ -272,12 +273,14 @@ class OrbitPDF(object):
         ' host virial radius, where virial is defined as in Bryan & Norman'
         ' (1998).',
         'v_max': 'Maximum velocity relative to final host, scaled to the host'
-        ' *3D* velocity dispersion.'
+        ' *3D* velocity dispersion.',
+        'm_max': 'Maximum past subhalo mass.',
+        'm_infall': 'Subhalo mass at infall time.'
     }
 
     def calculate_q(self, sat, cluster):
         retval = dict()
-
+        
         rel_xyz = self.wrapbox(
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
@@ -289,7 +292,7 @@ class OrbitPDF(object):
         ) / cluster['vrms'][self.iref]
         rel_v = np.sqrt(np.sum(np.power(rel_vxyz, 2), axis=1))
 
-        # INFALL TIME
+        # INFALL TIME & MASS AT THAT TIME
         # infall defined as crossing dR * Rvir
         # (non-evolving Rvir to avoid cluster growing and gaining sats
         # in strange places; recenter at merger might still be a bit odd)
@@ -300,16 +303,21 @@ class OrbitPDF(object):
             )).flatten()[0]
         except IndexError:
             retval['t_infall'] = np.nan
+            retval['m_infall'] = np.nan
         else:
             mask = np.s_[i_infall: i_infall + 1]
             retval['t_infall'] = \
                 np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
+            retval['m_infall'] = \
+                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'])
 
-        # CLOSEST APPROACH AND MAX SPEED SO FAR
-        # closest recorded approach and speed up to present time
+        # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
+        # closest recorded approach and speed up to present time,
+        # and maximum mass at any past time
         mask = np.s_[:] if self.iref == -1 else np.s_[:self.iref + 1]
         retval['r_min'] = np.nanmin(rel_r[mask])
         retval['v_max'] = np.nanmax(rel_v[mask])
+        retval['m_max'] = np.nanmax(sat['mvir'][mask])
 
         # TIME OF FIRST PERICENTRE
         minima = np.logical_and(
