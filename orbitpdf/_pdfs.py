@@ -249,7 +249,7 @@ class OrbitPDF(object):
 
         return
 
-    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max'}
+    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max', 'm_max', 'm_infall'}
     qunits = {
         't_infall': 'dimensionless_unscaled',
         't_peri': 'dimensionless_unscaled',
@@ -257,7 +257,8 @@ class OrbitPDF(object):
         'v': 'dimensionless_unscaled',
         'r_min': 'dimensionless_unscaled',
         'v_max': 'dimensionless_unscaled',
-        'm_max': 'solMass'
+        'm_max': 'solMass',
+        'm_infall': 'solMass'
     }
     qdescs = {
         't_infall': 'Scale factor at first infall into final host'
