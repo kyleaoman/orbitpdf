@@ -107,7 +107,6 @@ class OrbitPDF(object):
                         len(cluster['interlopers/ids'])
                     )
 
-
                 if np.logical_or(
                         cluster['mvir'][self.iref]
                         < self.cfg.pdf_m_min_cluster.value,
@@ -139,7 +138,7 @@ class OrbitPDF(object):
                             self.statistics['preaccretion'] += 1
                             continue
 
-                    if np.max(sat['mvir']) < self.cfg.resolution_cut.value:
+                    if np.nanmax(sat['mvir']) < self.cfg.resolution_cut.value:
                         self.statistics['peakmass'] += 1
                         continue
 
@@ -249,7 +248,8 @@ class OrbitPDF(object):
 
         return
 
-    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max', 'm_max', 'm_infall'}
+    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max',
+             'm_max', 'm_infall'}
     qunits = {
         't_infall': 'dimensionless_unscaled',
         't_peri': 'dimensionless_unscaled',
@@ -281,7 +281,6 @@ class OrbitPDF(object):
 
     def calculate_q(self, sat, cluster):
         retval = dict()
-        
         rel_xyz = self.wrapbox(
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
@@ -307,10 +306,16 @@ class OrbitPDF(object):
             retval['m_infall'] = np.nan
         else:
             mask = np.s_[i_infall: i_infall + 1]
-            retval['t_infall'] = \
-                np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
-            retval['m_infall'] = \
-                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'][mask])
+            retval['t_infall'] = np.interp(
+                self.cfg.interloper_dR,
+                rel_r[mask],
+                self.sfs[mask]
+            )
+            retval['m_infall'] = np.interp(
+                retval['t_infall'],
+                self.sfs[mask],
+                sat['mvir'][mask]
+            )
 
         # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
         # closest recorded approach and speed up to present time,
