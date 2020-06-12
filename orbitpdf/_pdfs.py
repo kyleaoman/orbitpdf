@@ -107,7 +107,6 @@ class OrbitPDF(object):
                         len(cluster['interlopers/ids'])
                     )
 
-
                 if np.logical_or(
                         cluster['mvir'][self.iref]
                         < self.cfg.pdf_m_min_cluster.value,
@@ -280,7 +279,6 @@ class OrbitPDF(object):
 
     def calculate_q(self, sat, cluster):
         retval = dict()
-        
         rel_xyz = self.wrapbox(
             np.array(sat['xyz'])
             - np.array(cluster['xyz'])
