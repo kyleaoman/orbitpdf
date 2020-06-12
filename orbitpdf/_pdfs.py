@@ -248,7 +248,7 @@ class OrbitPDF(object):
 
         return
 
-    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max'}
+    qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max', 'm_max', 'm_infall'}
     qunits = {
         't_infall': 'dimensionless_unscaled',
         't_peri': 'dimensionless_unscaled',
@@ -256,7 +256,8 @@ class OrbitPDF(object):
         'v': 'dimensionless_unscaled',
         'r_min': 'dimensionless_unscaled',
         'v_max': 'dimensionless_unscaled',
-        'm_max': 'solMass'
+        'm_max': 'solMass',
+        'm_infall': 'solMass'
     }
     qdescs = {
         't_infall': 'Scale factor at first infall into final host'
@@ -307,7 +308,7 @@ class OrbitPDF(object):
             retval['t_infall'] = \
                 np.interp(self.cfg.interloper_dR, rel_r[mask], self.sfs[mask])
             retval['m_infall'] = \
-                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'])
+                np.interp(retval['t_infall'], self.sfs[mask], sat['mvir'][mask])
 
         # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
         # closest recorded approach and speed up to present time,
