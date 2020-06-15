@@ -4,11 +4,14 @@ import itertools
 import os
 from functools import reduce
 from pathos.multiprocessing import ProcessPool
+from multiprocessing import Lock
 
 from ._util import _log
 import read_tree
 
 libver = 'latest'  # sacrifice backwards-compatibility for speed in hdf5 writes
+
+_lock = Lock()
 
 
 def _get_superparent(halo):
@@ -100,16 +103,32 @@ class Orbits(object):
         # Memory usage is too high if collecting everything before write.
         # Solution is to write after processing each file.
         # Doing this in parallel needs blocking, which I haven't figured out.
-        for infile in self.infiles:
-            _log('ORBIT SEARCH')
-            out_arrays = _process_orbits(infile, **self.cfg)
-            with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
-                _log('ORBIT OUTPUT')
-                for progress, out_array in enumerate(out_arrays):
-                    if (progress % 1000) == 0:
-                        _log(' ', progress, '/', len(out_arrays))
-                    self._write_satellite(f, out_array)
-            del out_arrays
+        target_kwargs = dict(self.cfg)
+
+        def target(infile):
+            out_arrays = _process_orbits(infile, **target_kwargs)
+            with _lock:
+                with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
+                    for progress, out_array in enumerate(out_arrays):
+                        if (progress % 1000) == 0:
+                            _log(' ', progress, '/', len(out_arrays))
+                        self._write_satellite(f, out_array)
+            return
+
+        if self.cfg.ncpu > 1:
+            pool = ProcessPool(ncpus=min(self.cfg.ncpu, len(self.infiles)))
+            pool.map(target, self.infiles)
+        else:
+            for infile in self.infiles:
+                _log('ORBIT SEARCH ({:s})'.format(infile))
+                out_arrays = _process_orbits(infile, **self.cfg)
+                with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
+                    _log('ORBIT OUTPUT')
+                    for progress, out_array in enumerate(out_arrays):
+                        if (progress % 1000) == 0:
+                            _log(' ', progress, '/', len(out_arrays))
+                        self._write_satellite(f, out_array)
+                del out_arrays
 
         _log('END')
 
