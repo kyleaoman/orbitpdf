@@ -78,48 +78,21 @@ class Orbits(object):
         if self.cfg.ncpu > 1:
             pool = ProcessPool(ncpus=min(self.cfg.ncpu, len(self.infiles)))
             all_out_arrays = pool.map(target, self.infiles)
-            _log('INTERLOPER REDUCTION')
-            all_out_arrays = reduce(lambda a, b: a + b, all_out_arrays)
-
-            def listdict_merge(d1, d2):
-                return {
-                    nid: dict(
-                        (k, d1.get(nid, dict()).get(k, list())
-                         + d2.get(nid, dict()).get(k, list()))
-                        for k in set(d1.get(nid, dict()).keys()).union(
-                                d2.get(nid, dict()).keys())
-                    ) for nid in set(d1.keys()).union(d2.keys())
-                }
-
-            # each oa has only one key so indexing is safe:
-            keylist = np.array([list(oa.keys())[0] for oa in all_out_arrays])
-            unique_keys = np.unique(keylist)
-            for progress, k in enumerate(unique_keys):
-                if progress % 1000 == 0:
-                    _log(' ', progress, '/', len(unique_keys))
-                # recompute keylist each iteration since we're deleting items
-                keylist = np.array([list(oa.keys())[0]
-                                    for oa in all_out_arrays])
-                kis = np.flatnonzero(keylist == k)
-                all_out_arrays[kis[0]] = reduce(listdict_merge,
-                                                np.array(all_out_arrays)[kis])
-                for ki in kis[1:][::-1]:
-                    del all_out_arrays[ki]
-            all_out_arrays = {k: v
-                              for all_out_array in all_out_arrays
-                              for k, v in all_out_array.items()}
-            _log('INTERLOPER OUTPUT')
-            with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
-                for cluster_id, interlopers in all_out_arrays.items():
-                    self._write_interlopers(f, cluster_id, interlopers)
         else:
+            all_out_arrays = list()
             for infile in self.infiles:
-                all_out_arrays = target(infile)
-                _log('INTERLOPER OUTPUT (PARTIAL)')
-                with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
-                    for cluster_id, interlopers in all_out_arrays.items():
-                        self._write_interlopers(f, cluster_id, interlopers)
+                all_out_arrays.append(target(infile))
 
+        _log('INTERLOPER REDUCTION')
+        all_out_arrays = np.vstack(all_out_arrays)
+        unique_keys = np.unique(all_out_arrays['is_near'])
+        _log('INTERLOPER OUTPUT')
+        with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
+            for cluster_id in unique_keys:
+                interlopers = all_out_arrays[
+                    all_out_arrays['is_near'] == cluster_id
+                ]
+                self._write_interlopers(f, cluster_id, interlopers)
         return
 
     def orbit_search(self):
@@ -367,7 +340,7 @@ class Orbits(object):
 
 # called by parallel function, keep outside class
 def _extract_cluster_arrays(cluster_branch, h0=None):
-    data = {}
+    data = dict()
 
     data['ids'] = [halo.id if halo is not None else -1
                    for halo in cluster_branch]
@@ -378,7 +351,7 @@ def _extract_cluster_arrays(cluster_branch, h0=None):
     data['vrmss'] = [halo.vrms if halo is not None else np.nan
                      for halo in cluster_branch]
 
-    subhalos = []
+    subhalos = list()
     for halo in cluster_branch:
         if halo is not None:
             if halo.parent is not None:
@@ -389,7 +362,7 @@ def _extract_cluster_arrays(cluster_branch, h0=None):
             subhalos.append(False)
     data['subhalos'] = subhalos
 
-    superparent_mvirs = []
+    superparent_mvirs = list()
     for halo in cluster_branch:
         superparent = _get_superparent(halo)
         if superparent is not None:
@@ -418,26 +391,45 @@ def _extract_cluster_arrays(cluster_branch, h0=None):
 
 def _extract_interloper_arrays(halo, is_near, h0=None):
 
-    data = {}
+    # ids, mvirs, rvirs, vrmss, xs, ys, zs, vxs, vys, vzs
+    data = np.array(
+        [(
+            -1,
+            halo.id,
+            halo.mvir / h0,
+            halo.rvir / h0,
+            halo.vrms,
+            halo.pos[0] / h0,
+            halo.pos[1] / h0,
+            halo.pos[2] / h0,
+            halo.vel[0],
+            halo.vel[1],
+            halo.vel[2]
+        )],
+        dtype=np.dtype([
+            ('is_near', np.int),
+            ('ids', np.int),
+            ('mvirs', np.float),
+            ('rvirs', np.float),
+            ('vrmss', np.float),
+            ('xs', np.float),
+            ('ys', np.float),
+            ('zs', np.float),
+            ('vxs', np.float),
+            ('vys', np.float),
+            ('vzs', np.float)
+        ])
+    )
+    data = np.tile(data, (is_near.size, 1))
+    data['is_near'] = is_near[:, np.newaxis]
 
-    data['ids'] = [halo.id]
-    data['mvirs'] = [halo.mvir / h0]
-    data['rvirs'] = [halo.rvir / h0]
-    data['vrmss'] = [halo.vrms]
-    data['xs'] = [halo.pos[0] / h0]
-    data['ys'] = [halo.pos[1] / h0]
-    data['zs'] = [halo.pos[2] / h0]
-    data['vxs'] = [halo.vel[0]]
-    data['vys'] = [halo.vel[1]]
-    data['vzs'] = [halo.vel[2]]
-
-    return {k: data for k in is_near}
+    return data
 
 
 def _extract_orbit_arrays(cluster_id, halo_branch, superparent_branch, h0=None,
                           skipmore_for_select=None):
 
-    data = {}
+    data = dict()
     data['cluster_id'] = cluster_id
 
     data['ids'] = [halo.id if halo is not None else -1
@@ -508,7 +500,7 @@ def _process_clusters(infile, scales=None, skipsnaps=None,
 
     _log('start', infile)
 
-    out_arrays = []
+    out_arrays = list()
 
     read_tree.read_tree(infile)
     _log('read complete', infile)
@@ -524,7 +516,7 @@ def _process_clusters(infile, scales=None, skipsnaps=None,
            (halo.mvir / h0 < m_min_cluster.value):
             continue
 
-        cluster_branch = []
+        cluster_branch = list()
 
         for level in range(nsnaps):
 
@@ -565,11 +557,11 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
     # memory object to work around this
     # note: placed here it gets destroyed when no longer needed
 
-    cluster_ids = []
-    cluster_xyzs = []
-    cluster_vzs = []
-    cluster_rvirs = []
-    cluster_vrmss = []
+    cluster_ids = list()
+    cluster_xyzs = list()
+    cluster_vzs = list()
+    cluster_rvirs = list()
+    cluster_vrmss = list()
 
     with h5py.File(outfile, 'r', libver=libver) as f:
 
@@ -593,7 +585,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
     # all_halos = read_tree.all_halos
     halo_tree = read_tree.halo_tree
 
-    out_arrays = []
+    out_arrays = list()
 
     for halo in halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos:
 
@@ -632,7 +624,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
 
     read_tree.delete_tree()
 
-    return out_arrays
+    return np.vstack(out_arrays)
 
 
 # parallel function: must be outside class, prefer simple arguments
@@ -647,10 +639,10 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
     # memory object to work around this
     # note: placed here it gets destroyed when no longer needed
 
-    cluster_ids = []
-    cluster_xyzs = []
-    cluster_rvirs = []
-    cluster_mvirs = []
+    cluster_ids = list()
+    cluster_xyzs = list()
+    cluster_rvirs = list()
+    cluster_mvirs = list()
 
     with h5py.File(outfile, 'r', libver=libver) as f:
 
@@ -675,7 +667,7 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
 
     nsnaps = len(scales) - skipsnaps - skipmore_for_select
 
-    out_arrays = []
+    out_arrays = list()
 
     halo_list = halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos
 
@@ -702,8 +694,8 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
         # if multiple possible hosts pick most massive
         host_id = cluster_ids[is_near][np.argmax(cluster_mvirs[is_near])]
 
-        halo_branch = []
-        superparent_branch = []
+        halo_branch = list()
+        superparent_branch = list()
 
         for level in range(nsnaps):
 
