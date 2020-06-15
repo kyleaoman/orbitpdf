@@ -100,19 +100,21 @@ class Orbits(object):
 
     def orbit_search(self):
 
-        # Memory usage is too high if collecting everything before write.
-        # Solution is to write after processing each file.
-        # Doing this in parallel needs blocking, which I haven't figured out.
         target_kwargs = dict(self.cfg)
 
         def target(infile):
             out_arrays = _process_orbits(infile, **target_kwargs)
+            print('!!!!!!')
             with _lock:
-                with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
+                with h5py.File(
+                        target_kwargs['outfile'],
+                        'a',
+                        libver=libver
+                ) as f:
                     for progress, out_array in enumerate(out_arrays):
                         if (progress % 1000) == 0:
                             _log(' ', progress, '/', len(out_arrays))
-                        self._write_satellite(f, out_array)
+                        _write_satellite(f, out_array, **target_kwargs)
             return
 
         if self.cfg.ncpu > 1:
@@ -127,7 +129,7 @@ class Orbits(object):
                     for progress, out_array in enumerate(out_arrays):
                         if (progress % 1000) == 0:
                             _log(' ', progress, '/', len(out_arrays))
-                        self._write_satellite(f, out_array)
+                        _write_satellite(f, out_array, **self.cfg)
                 del out_arrays
 
         _log('END')
@@ -267,94 +269,95 @@ class Orbits(object):
 
         return
 
-    def _write_satellite(self, f, data):
 
-        g = f['clusters/'+str(data['cluster_id'])+'/satellites'].create_group(
-            str(data['ids'][-1 - self.cfg.skipmore_for_select]))
+def _write_satellite(f, data, skipmore_for_select=None, **kwargs):
 
-        g['ids'] = np.array(data['ids'], dtype=np.int)
-        g['ids'].attrs['units'] = '-'
-        g['ids'].attrs['description'] = 'halo id'
+    g = f['clusters/'+str(data['cluster_id'])+'/satellites'].create_group(
+        str(data['ids'][-1 - skipmore_for_select]))
 
-        g['mvir'] = np.array(data['mvirs'], dtype=np.float)
-        g['mvir'].attrs['units'] = 'Msun'
-        g['mvir'].attrs['description'] = \
-            'halo virial mass (Bryan & Norman 1998)'
-        g['mvir'].attrs['max(mvir)/Msun'] = str(np.max(data['mvirs']))
+    g['ids'] = np.array(data['ids'], dtype=np.int)
+    g['ids'].attrs['units'] = '-'
+    g['ids'].attrs['description'] = 'halo id'
 
-        g['rvir'] = np.array(data['rvirs'], dtype=np.float)
-        g['rvir'].attrs['units'] = 'kpc'
-        g['rvir'].attrs['description'] = \
-            'halo virial radius (Bryan & Norman 1998)'
+    g['mvir'] = np.array(data['mvirs'], dtype=np.float)
+    g['mvir'].attrs['units'] = 'Msun'
+    g['mvir'].attrs['description'] = \
+        'halo virial mass (Bryan & Norman 1998)'
+    g['mvir'].attrs['max(mvir)/Msun'] = str(np.max(data['mvirs']))
 
-        g['vrms'] = np.array(data['vrmss'], dtype=np.float)
-        g['vrms'].attrs['units'] = 'km/s'
-        g['vrms'].attrs['description'] = 'halo velocity dispersion'
+    g['rvir'] = np.array(data['rvirs'], dtype=np.float)
+    g['rvir'].attrs['units'] = 'kpc'
+    g['rvir'].attrs['description'] = \
+        'halo virial radius (Bryan & Norman 1998)'
 
-        g['xyz'] = np.vstack((
-            np.array(data['xs'], dtype=np.float),
-            np.array(data['ys'], dtype=np.float),
-            np.array(data['zs'], dtype=np.float)
-        )).T
-        g['xyz'].attrs['units'] = 'Mpc'
-        g['xyz'].attrs['description'] = 'halo coordinates (x, y, z)'
+    g['vrms'] = np.array(data['vrmss'], dtype=np.float)
+    g['vrms'].attrs['units'] = 'km/s'
+    g['vrms'].attrs['description'] = 'halo velocity dispersion'
 
-        g['vxyz'] = np.vstack((
-            np.array(data['vxs'], dtype=np.float),
-            np.array(data['vys'], dtype=np.float),
-            np.array(data['vzs'], dtype=np.float)
-        )).T
-        g['vxyz'].attrs['units'] = 'km/s'
-        g['vxyz'].attrs['description'] = 'halo velocity (vx, vy, vz)'
+    g['xyz'] = np.vstack((
+        np.array(data['xs'], dtype=np.float),
+        np.array(data['ys'], dtype=np.float),
+        np.array(data['zs'], dtype=np.float)
+    )).T
+    g['xyz'].attrs['units'] = 'Mpc'
+    g['xyz'].attrs['description'] = 'halo coordinates (x, y, z)'
 
-        g['is_subsub'] = np.array(data['subsub'], dtype=np.bool)
-        g['is_subsub'].attrs['units'] = '-'
-        g['is_subsub'].attrs['description'] = 'halo is a sub-sub-[...]-halo'
+    g['vxyz'] = np.vstack((
+        np.array(data['vxs'], dtype=np.float),
+        np.array(data['vys'], dtype=np.float),
+        np.array(data['vzs'], dtype=np.float)
+    )).T
+    g['vxyz'].attrs['units'] = 'km/s'
+    g['vxyz'].attrs['description'] = 'halo velocity (vx, vy, vz)'
 
-        g['sp_is_fpp'] = np.array(data['sp_ids'], dtype=np.int) == \
-            np.array(f['clusters/'+str(data['cluster_id'])+'/ids'])
-        g['sp_is_fpp'].attrs['units'] = '-'
-        g['sp_is_fpp'].attrs['description'] = \
-            'superparent of halo is primary progenitor ' \
-            'of superparent at final scale'
+    g['is_subsub'] = np.array(data['subsub'], dtype=np.bool)
+    g['is_subsub'].attrs['units'] = '-'
+    g['is_subsub'].attrs['description'] = 'halo is a sub-sub-[...]-halo'
 
-        g = g.create_group('superparent')
+    g['sp_is_fpp'] = np.array(data['sp_ids'], dtype=np.int) == \
+        np.array(f['clusters/'+str(data['cluster_id'])+'/ids'])
+    g['sp_is_fpp'].attrs['units'] = '-'
+    g['sp_is_fpp'].attrs['description'] = \
+        'superparent of halo is primary progenitor ' \
+        'of superparent at final scale'
 
-        g['ids'] = np.array(data['sp_ids'], dtype=np.int)
-        g['ids'].attrs['units'] = '-'
-        g['ids'].attrs['description'] = 'halo id'
+    g = g.create_group('superparent')
 
-        g['mvir'] = np.array(data['sp_mvirs'], dtype=np.float)
-        g['mvir'].attrs['units'] = 'Msun'
-        g['mvir'].attrs['description'] = \
-            'halo virial mass (Bryan & Norman 1998)'
+    g['ids'] = np.array(data['sp_ids'], dtype=np.int)
+    g['ids'].attrs['units'] = '-'
+    g['ids'].attrs['description'] = 'halo id'
 
-        g['rvir'] = np.array(data['sp_rvirs'], dtype=np.float)
-        g['rvir'].attrs['units'] = 'kpc'
-        g['rvir'].attrs['description'] = \
-            'halo virial radius (Bryan & Norman 1998)'
+    g['mvir'] = np.array(data['sp_mvirs'], dtype=np.float)
+    g['mvir'].attrs['units'] = 'Msun'
+    g['mvir'].attrs['description'] = \
+        'halo virial mass (Bryan & Norman 1998)'
 
-        g['vrms'] = np.array(data['sp_vrmss'], dtype=np.float)
-        g['vrms'].attrs['units'] = 'km/s'
-        g['vrms'].attrs['description'] = 'halo velocity dispersion'
+    g['rvir'] = np.array(data['sp_rvirs'], dtype=np.float)
+    g['rvir'].attrs['units'] = 'kpc'
+    g['rvir'].attrs['description'] = \
+        'halo virial radius (Bryan & Norman 1998)'
 
-        g['xyz'] = np.vstack((
-            np.array(data['sp_xs'], dtype=np.float),
-            np.array(data['sp_ys'], dtype=np.float),
-            np.array(data['sp_zs'], dtype=np.float)
-        )).T
-        g['xyz'].attrs['units'] = 'Mpc'
-        g['xyz'].attrs['description'] = 'halo coordinates (x, y, z)'
+    g['vrms'] = np.array(data['sp_vrmss'], dtype=np.float)
+    g['vrms'].attrs['units'] = 'km/s'
+    g['vrms'].attrs['description'] = 'halo velocity dispersion'
 
-        g['vxyz'] = np.vstack((
-            np.array(data['sp_vxs'], dtype=np.float),
-            np.array(data['sp_vys'], dtype=np.float),
-            np.array(data['sp_vzs'], dtype=np.float)
-        )).T
-        g['vxyz'].attrs['units'] = 'km/s'
-        g['vxyz'].attrs['description'] = 'halo velocity (vx, vy, vz)'
+    g['xyz'] = np.vstack((
+        np.array(data['sp_xs'], dtype=np.float),
+        np.array(data['sp_ys'], dtype=np.float),
+        np.array(data['sp_zs'], dtype=np.float)
+    )).T
+    g['xyz'].attrs['units'] = 'Mpc'
+    g['xyz'].attrs['description'] = 'halo coordinates (x, y, z)'
 
-        return
+    g['vxyz'] = np.vstack((
+        np.array(data['sp_vxs'], dtype=np.float),
+        np.array(data['sp_vys'], dtype=np.float),
+        np.array(data['sp_vzs'], dtype=np.float)
+    )).T
+    g['vxyz'].attrs['units'] = 'km/s'
+    g['vxyz'].attrs['description'] = 'halo velocity (vx, vy, vz)'
+
+    return
 
 
 # called by parallel function, keep outside class
