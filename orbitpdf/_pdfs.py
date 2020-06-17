@@ -120,8 +120,8 @@ class OrbitPDF(object):
                 output = list(tqdm(
                     pool.imap(target, clist),
                     total=len(clist),
-                    file=sys.stdout)
-                )
+                    file=sys.stdout
+                ))
 
         else:
             output = list()
