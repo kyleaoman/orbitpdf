@@ -91,7 +91,9 @@ class Orbits(object):
         unique_keys = np.unique(all_out_arrays['is_near'])
         _log('INTERLOPER OUTPUT')
         with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
-            for cluster_id in unique_keys:
+            for ik, cluster_id in enumerate(unique_keys):
+                if ik % 1000 == 0:
+                    _log('  ', ik, '/', unique_keys.size)
                 interlopers = all_out_arrays[
                     all_out_arrays['is_near'] == cluster_id
                 ]
@@ -100,20 +102,47 @@ class Orbits(object):
 
     def orbit_search(self):
 
-        target_kwargs = dict(self.cfg)
+        cluster_ids = list()
+        cluster_xyzs = list()
+        cluster_rvirs = list()
+        cluster_mvirs = list()
+
+        with h5py.File(self.cfg.outfile, 'r', libver=libver) as f:
+
+            for cluster_key, cluster in f['clusters'].items():
+
+                cluster_ids.append(
+                    cluster['ids'][-1 - self.cfg.skipmore_for_select])
+                cluster_xyzs.append(
+                    cluster['xyz'][-1 - self.cfg.skipmore_for_select])
+                cluster_rvirs.append(
+                    cluster['rvir'][-1 - self.cfg.skipmore_for_select])
+                cluster_mvirs.append(
+                    cluster['mvir'][-1 - self.cfg.skipmore_for_select])
+
+        cluster_ids = np.array(cluster_ids, dtype=np.long)
+        cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
+        cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
+        cluster_mvirs = np.array(cluster_mvirs, dtype=np.float)
+        cdat = dict(
+            cluster_ids=cluster_ids,
+            cluster_xyzs=cluster_xyzs,
+            cluster_rvirs=cluster_rvirs,
+            cluster_mvirs=cluster_mvirs
+        )
+
+        target_kwargs = dict(self.cfg, **cdat)
 
         def target(infile):
             out_arrays = _process_orbits(infile, **target_kwargs)
-            print('!!!!!!')
             with _lock:
+                _log('  writing output', infile.split('/')[-1])
                 with h5py.File(
-                        target_kwargs['outfile'],
-                        'a',
-                        libver=libver
-                ) as f:
+                        target_kwargs['outfile'], 'a', libver=libver) as f:
                     for progress, out_array in enumerate(out_arrays):
-                        if (progress % 1000) == 0:
-                            _log(' ', progress, '/', len(out_arrays))
+                        if progress % 100 == 0:
+                            _log('    write progress', progress, '/',
+                                 len(out_arrays), '|', infile.split('/')[-1])
                         _write_satellite(f, out_array, **target_kwargs)
             return
 
@@ -123,7 +152,7 @@ class Orbits(object):
         else:
             for infile in self.infiles:
                 _log('ORBIT SEARCH ({:s})'.format(infile))
-                out_arrays = _process_orbits(infile, **self.cfg)
+                out_arrays = _process_orbits(infile, **self.cfg, **cdat)
                 with h5py.File(self.cfg.outfile, 'a', libver=libver) as f:
                     _log('ORBIT OUTPUT')
                     for progress, out_array in enumerate(out_arrays):
@@ -654,31 +683,11 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
                     skipmore_for_select=None, h0=None, lbox=None,
                     m_min_satellite=None, m_max_satellite=None,
                     m_min_cluster=None, m_max_cluster=None, interloper_dR=None,
-                    **kwargs):
+                    cluster_ids=None, cluster_xyzs=None, cluster_rvirs=None,
+                    cluster_mvirs=None, **kwargs):
 
-    # read clusters here will happen for each parallel process, but would be
-    # copied for each process anyway, would need to explicitly set up a shared
-    # memory object to work around this
-    # note: placed here it gets destroyed when no longer needed
-
-    cluster_ids = list()
-    cluster_xyzs = list()
-    cluster_rvirs = list()
-    cluster_mvirs = list()
-
-    with h5py.File(outfile, 'r', libver=libver) as f:
-
-        for cluster_key, cluster in f['clusters'].items():
-
-            cluster_ids.append(cluster['ids'][-1 - skipmore_for_select])
-            cluster_xyzs.append(cluster['xyz'][-1 - skipmore_for_select])
-            cluster_rvirs.append(cluster['rvir'][-1 - skipmore_for_select])
-            cluster_mvirs.append(cluster['mvir'][-1 - skipmore_for_select])
-
-    cluster_ids = np.array(cluster_ids, dtype=np.long)
-    cluster_xyzs = np.array(cluster_xyzs, dtype=np.float)
-    cluster_rvirs = np.array(cluster_rvirs, dtype=np.float)
-    cluster_mvirs = np.array(cluster_mvirs, dtype=np.float)
+    # because of parallel writing, putting reads of the 'outfile' here
+    # causes errors
 
     _log('  processing file, reading', infile.split('/')[-1])
     read_tree.read_tree(infile)
@@ -693,12 +702,10 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
 
     halo_list = halo_tree.halo_lists[skipsnaps + skipmore_for_select].halos
 
-    for halo in halo_list:
-
-        # REVISE THIS TO BE MAX ALONG ORBIT?
-        if (halo.mvir / h0 > m_max_satellite.value) or \
-           (halo.mvir / h0 < m_min_satellite.value):
-            continue
+    for progress, halo in enumerate(halo_list):
+        if progress % 1000 == 0:
+            _log('    process progress', progress, '/',
+                 len(halo_list), '|', infile.split('/')[-1])
 
         xyz = np.array([
             halo.pos[0] / h0,
@@ -736,6 +743,12 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
         halo_branch = halo_branch[::-1]
         superparent_branch = superparent_branch[::-1]
 
+        mvir_max = np.nanmax([halo.mvir / h0 if halo is not None else np.nan
+                              for halo in halo_branch])
+        if (mvir_max > m_max_satellite.value) or \
+           (mvir_max / h0 < m_min_satellite.value):
+            continue
+
         for level in range(skipmore_for_select):
             if halo_branch[-1] is None:
                 halo_branch.append(None)
@@ -755,5 +768,6 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
         )
 
     read_tree.delete_tree()
+    _log('  processing complete', infile.split('/')[-1])
 
     return out_arrays
