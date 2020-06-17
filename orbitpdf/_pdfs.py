@@ -4,6 +4,7 @@ from ._util import _log
 import astropy.units as U
 from pathos.multiprocessing import ProcessPool
 from tqdm import tqdm
+import sys
 
 np.seterr(all='ignore')
 
@@ -116,12 +117,17 @@ class OrbitPDF(object):
             with ProcessPool(nodes=min(self.cfg.ncpu, len(clist))) as pool:
                 # output = pool.imap(target, clist)  # lazy evaluation
                 # output = list(output)  # force evaluation
-                output = list(tqdm(pool.imap(target, clist), total=len(clist)))
+                output = list(tqdm(
+                    pool.imap(target, clist),
+                    total=len(clist),
+                    file=sys.stdout)
+                )
 
         else:
             output = list()
-            for cid in clist:
-                # can print progress here
+            for progress, cid in enumerate(clist):
+                if progress % 100 == 0:
+                    _log(progress, '/', len(clist))
                 output.append(target(cid))
         self.rlist = np.concatenate([o[0] for o in output])
         self.vlist = np.concatenate([o[1] for o in output])
@@ -396,6 +402,11 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
             mhostlist_i = np.ones(np.sum(select_interlopers)) \
                 * cluster['mvir'][iref]
             msatlist_i = cluster['interlopers/mvir'][select_interlopers]
+        else:
+            rlist_i = np.empty((0, ))
+            vlist_i = np.empty((0, ))
+            mhostlist_i = np.empty((0, ))
+            msatlist_i = np.empty((0, ))
 
         return rlist, vlist, mhostlist, msatlist, qlists, \
             rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
