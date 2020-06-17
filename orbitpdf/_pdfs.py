@@ -3,6 +3,7 @@ import numpy as np
 from ._util import _log
 import astropy.units as U
 from pathos.multiprocessing import ProcessPool
+from tqdm import tqdm
 
 np.seterr(all='ignore')
 
@@ -112,10 +113,16 @@ class OrbitPDF(object):
             return _process_orbit(cid, **target_kwargs)
 
         if self.cfg.ncpu > 1:
-            pool = ProcessPool(nodes=min(self.cfg.ncpu, len(clist)))
-            output = pool.map(target, clist)
+            with ProcessPool(nodes=min(self.cfg.ncpu, len(clist))) as pool:
+                # output = pool.imap(target, clist)  # lazy evaluation
+                # output = list(output)  # force evaluation
+                output = list(tqdm(pool.imap(target, clist), total=len(clist)))
+
         else:
-            output = [target(cid) for cid in clist]
+            output = list()
+            for cid in clist:
+                # can print progress here
+                output.append(target(cid))
         self.rlist = np.concatenate([o[0] for o in output])
         self.vlist = np.concatenate([o[1] for o in output])
         self.mhostlist = np.concatenate([o[2] for o in output])
@@ -126,12 +133,14 @@ class OrbitPDF(object):
         self.mhostlist_i = np.concatenate([o[7] for o in output])
         self.msatlist_i = np.concatenate([o[8] for o in output])
         self.statistics = np.concatenate([o[9] for o in output])
+        self.statistics = {k: self.statistics[k].sum()
+                           for k in self.statistics.dtype.names}
 
         return
 
     def write(self):
-        for k in self.statistics.dtype.names:
-            print(k, self.statistics[k].sum())
+        for k, v in self.statistics.items():
+            _log(k, v)
 
         with h5py.File(self.cfg.pdfsfile, 'w') as f:
             g = f.create_group('satellites')
@@ -259,7 +268,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                    pdf_m_min_cluster=None, pdf_m_max_cluster=None,
                    pdf_m_min_satellite=None, pdf_m_max_satellite=None,
                    resolution_cut=None, interloper_dR=None,
-                   interloper_dV=None):
+                   interloper_dV=None, lbox=None, h0=None,
+                   signed_V=None, sfs=None, **kwargs):
     statistics = np.array(
         np.zeros(1),
         dtype=np.dtype([
@@ -279,25 +289,13 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
     qlists = list()
 
     with h5py.File(orbitfile, 'r') as f:
-        cluster = f['/clusters/{:d}'.format(cluster_id)]
+        cluster = f['/clusters/{:s}'.format(cluster_id)]
         try:
             cluster['interlopers/ids']
         except KeyError:
             no_interlopers = True
         else:
             no_interlopers = False
-        if no_interlopers:
-            _log(
-                '    Nsat',
-                len(cluster['satellites'])
-            )
-        else:
-            _log(
-                '    Nsat',
-                len(cluster['satellites']),
-                'Ninterloper',
-                len(cluster['interlopers/ids'])
-            )
 
         if np.logical_or(
                 cluster['mvir'][iref]
@@ -307,7 +305,20 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
         ):
             statistics['clustermass'] += \
                 len(cluster['satellites'])
-            continue
+            rlist = np.empty((0, ))
+            vlist = np.empty((0, ))
+            mhostlist = np.empty((0, ))
+            msatlist = np.empty((0, ))
+            qlists = np.empty(
+                (0, ),
+                dtype=np.dtype([(k, np.float) for k in qkeys])
+            )
+            rlist_i = np.empty((0, ))
+            vlist_i = np.empty((0, ))
+            mhostlist_i = np.empty((0, ))
+            msatlist_i = np.empty((0, ))
+            return rlist, vlist, mhostlist, msatlist, qlists, \
+                rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
 
         for sat_id, sat in cluster['satellites'].items():
 
@@ -334,7 +345,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 statistics['peakmass'] += 1
                 continue
 
-            r, v = delta_RV(sat, cluster, iref=iref)
+            r, v = delta_RV(sat, cluster, iref=iref, lbox=lbox, h0=h0,
+                            signed_V=signed_V)
 
             if (r > interloper_dR) or \
                (np.abs(v) > interloper_dV):
@@ -344,7 +356,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
             vlist.append(v)
             mhostlist.append(cluster['mvir'][iref])
             msatlist.append(sat['mvir'][iref])
-            qlists.append(calculate_q(sat, cluster))
+            qlists.append(calculate_q(sat, cluster, iref=iref, lbox=lbox,
+                                      interloper_dR=interloper_dR, sfs=sfs))
 
             statistics['using'] += 1
 
@@ -352,7 +365,13 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
         vlist = np.array(vlist)
         mhostlist = np.array(mhostlist)
         msatlist = np.array(msatlist)
-        qlists = np.concatenate(qlists)
+        if len(qlists):
+            qlists = np.concatenate(qlists)
+        else:
+            qlists = np.empty(
+                (0, ),
+                dtype=np.dtype([(k, np.float) for k in qkeys])
+            )
 
         if not no_interlopers:
             select_interlopers = np.logical_and(
@@ -370,7 +389,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 np.sum(select_interlopers)
 
             more_interloper_rs, more_interloper_vs = \
-                delta_RV_interlopers(cluster)
+                delta_RV_interlopers(cluster, iref=iref, lbox=lbox, h0=h0,
+                                     signed_V=signed_V)
             rlist_i = more_interloper_rs[select_interlopers]
             vlist_i = more_interloper_vs[select_interlopers]
             mhostlist_i = np.ones(np.sum(select_interlopers)) \
