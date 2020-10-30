@@ -11,7 +11,9 @@ class OrbitPDFConfig(OrbitsConfig):
         'pdf_m_max_satellite',
         'pdf_m_min_cluster',
         'pdf_m_max_cluster',
-        'resolution_cut'
+        'resolution_cut',
+        'H',
+        'z'
     }
 
     def __init__(self, *args, **kwargs):

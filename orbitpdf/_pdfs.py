@@ -46,13 +46,15 @@ def wrapbox(xyz, lbox=None):
     return xyz
 
 
-def delta_RV(sat, cluster, iref=None, lbox=None, H=None, signed_V=None):
+def delta_RV(sat, cluster, iref=None, lbox=None, H=None, signed_V=None,
+             z=None):
     rel_xyz = wrapbox(sat['xyz'][iref] - cluster['xyz'][iref], lbox=lbox)
     rel_vxyz = sat['vxyz'][iref] - cluster['vxyz'][iref]
     R = np.sqrt(np.sum(np.power(rel_xyz[:2], 2))) \
         / (1.E-3 * cluster['rvir'][iref])
+    a = 1 / (1 + z)
     V = np.abs(
-        rel_vxyz[2] + H.to(U.km / U.s / U.Mpc).value * rel_xyz[2]
+        rel_vxyz[2] + H.to(U.km / U.s / U.Mpc).value * a * rel_xyz[2]
     ) / cluster['vrms'][iref]
     if signed_V:
         sgn = np.sign(rel_xyz[2] * rel_vxyz[2])
@@ -61,7 +63,7 @@ def delta_RV(sat, cluster, iref=None, lbox=None, H=None, signed_V=None):
 
 
 def delta_RV_interlopers(cluster, iref=None, lbox=None, H=None,
-                         signed_V=None):
+                         signed_V=None, z=None):
     rel_xyz = wrapbox(
         cluster['interlopers/xyz'] - cluster['xyz'][iref],
         lbox=lbox
@@ -69,8 +71,9 @@ def delta_RV_interlopers(cluster, iref=None, lbox=None, H=None,
     rel_vxyz = cluster['interlopers/vxyz'] - cluster['vxyz'][iref]
     R = np.sqrt(np.sum(np.power(rel_xyz[:, :2], 2), axis=1)) \
         / (1.E-3 * cluster['rvir'][iref])
+    a = 1 / (1 + z)
     V = np.abs(
-        rel_vxyz[:, 2] + H.to(U.km / U.s / U.Mpc).value * rel_xyz[:, 2]
+        rel_vxyz[:, 2] + H.to(U.km / U.s / U.Mpc).value * a * rel_xyz[:, 2]
     ) / cluster['vrms'][iref]
     if signed_V:
         sgn = np.sign(rel_xyz[:, 2] * rel_vxyz[:, 2])
@@ -275,7 +278,7 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                    pdf_m_min_satellite=None, pdf_m_max_satellite=None,
                    resolution_cut=None, interloper_dR=None,
                    interloper_dV=None, lbox=None, H=None,
-                   signed_V=None, sfs=None, **kwargs):
+                   signed_V=None, sfs=None, z=None, **kwargs):
     statistics = np.array(
         np.zeros(1),
         dtype=np.dtype([
@@ -352,7 +355,7 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 continue
 
             r, v = delta_RV(sat, cluster, iref=iref, lbox=lbox, H=H,
-                            signed_V=signed_V)
+                            signed_V=signed_V, z=z)
 
             if (r > interloper_dR) or \
                (np.abs(v) > interloper_dV):
@@ -396,7 +399,7 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
 
             more_interloper_rs, more_interloper_vs = \
                 delta_RV_interlopers(cluster, iref=iref, lbox=lbox, H=H,
-                                     signed_V=signed_V)
+                                     signed_V=signed_V, z=z)
             rlist_i = more_interloper_rs[select_interlopers]
             vlist_i = more_interloper_vs[select_interlopers]
             mhostlist_i = np.ones(np.sum(select_interlopers)) \

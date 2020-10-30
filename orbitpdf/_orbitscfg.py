@@ -13,7 +13,9 @@ class OrbitsConfig(dict):
         'interloper_dR',
         'interloper_dV',
         'treedir',
-        'scalefile'
+        'scalefile',
+        'H',
+        'z'
     }
 
     def __init__(self, *args, **kwargs):
