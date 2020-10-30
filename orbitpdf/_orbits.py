@@ -601,7 +601,8 @@ def _process_clusters(infile, scales=None, skipsnaps=None,
 def _process_interlopers(infile, outfile=None, skipsnaps=None,
                          skipmore_for_select=None, h0=None, lbox=None,
                          m_min_satellite=None, m_max_satellite=None,
-                         interloper_dR=None, interloper_dV=None, **kwargs):
+                         interloper_dR=None, interloper_dV=None, H=None,
+                         **kwargs):
 
     # read clusters here will happen for each parallel process, but would be
     # copied for each process anyway, would need to explicitly set up a shared
@@ -654,7 +655,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
         D = xyz - cluster_xyzs
         D[D > lbox.value / 2.] -= lbox.value
         D[D < -lbox.value / 2.] += lbox.value
-        dvz = np.abs(vz - cluster_vzs + 100.0 * h0 * D[:, 2]) / cluster_vrmss
+        dvz = np.abs(vz - cluster_vzs + H * D[:, 2]) / cluster_vrmss
         D *= 1.E3 / cluster_rvirs[:, np.newaxis]  # rvir in kpc
         D = np.power(D, 2)
 
