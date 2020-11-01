@@ -72,5 +72,10 @@ class OrbitsConfig(dict):
         except AttributeError:
             raise AttributeError("OrbitsConfig: Provide units for lbox "
                                  "(astropy.units).")
+        try:
+            self['H'] = self['H'].to(U.km / U.s / U.Mpc)
+        except AttributeError:
+            raise AttributeError("OrbitsConfig: Provide units for H "
+                                 "(astropy.units).")
 
         return

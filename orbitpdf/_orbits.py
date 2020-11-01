@@ -616,9 +616,7 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
     cluster_vrmss = list()
 
     with h5py.File(outfile, 'r', libver=libver) as f:
-
         for cluster_key, cluster in f['clusters'].items():
-
             cluster_ids.append(cluster['ids'][-1 - skipmore_for_select])
             cluster_xyzs.append(cluster['xyz'][-1 - skipmore_for_select])
             cluster_vzs.append(cluster['vxyz'][-1 - skipmore_for_select, 2])
@@ -644,23 +642,21 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
         if (halo.mvir / h0 > m_max_satellite.value) or \
            (halo.mvir / h0 < m_min_satellite.value):
             continue
-
         xyz = np.array([
             halo.pos[0] / h0,
             halo.pos[1] / h0,
             halo.pos[2] / h0
         ], dtype=np.float)
-        vz = np.array([halo.vel[2]], dtype=np.float)
 
+        vz = np.array([halo.vel[2]], dtype=np.float)
         D = xyz - cluster_xyzs
         D[D > lbox.value / 2.] -= lbox.value
         D[D < -lbox.value / 2.] += lbox.value
         a = 1 / (1 + z)
         # Hubble law uses proper distance
-        dvz = np.abs(vz - cluster_vzs + H * D[:, 2] * a) / cluster_vrmss
+        dvz = np.abs(vz - cluster_vzs + H.value * D[:, 2] * a) / cluster_vrmss
         D *= 1.E3 / cluster_rvirs[:, np.newaxis]  # rvir in kpc
         D = np.power(D, 2)
-
         is_near = cluster_ids[
             np.logical_and(
                 np.logical_and(
@@ -672,12 +668,10 @@ def _process_interlopers(infile, outfile=None, skipsnaps=None,
                 dvz < interloper_dV  # inside velocity offset limit
             )
         ]
-
         if len(is_near):
             out_arrays.append(_extract_interloper_arrays(halo, is_near, h0=h0))
 
     read_tree.delete_tree()
-
     return np.vstack(out_arrays)
 
 
@@ -691,7 +685,6 @@ def _process_orbits(infile, outfile=None, scales=None, skipsnaps=None,
 
     # because of parallel writing, putting reads of the 'outfile' here
     # causes errors
-
     _log('  processing file, reading', infile.split('/')[-1])
     read_tree.read_tree(infile)
     _log('  read complete', infile.split('/')[-1])
