@@ -1,4 +1,5 @@
 import astropy.units as U
+import numpy as np
 
 
 class OrbitsConfig(dict):
@@ -77,5 +78,7 @@ class OrbitsConfig(dict):
         except AttributeError:
             raise AttributeError("OrbitsConfig: Provide units for H "
                                  "(astropy.units).")
+
+        self.scales = np.loadtxt(self.scalefile, unpack=True, usecols=(1, ))
 
         return

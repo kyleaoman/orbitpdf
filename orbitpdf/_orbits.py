@@ -36,8 +36,6 @@ class Orbits(object):
         _log('START')
         cfg._validate()
         self.cfg = cfg
-        self.cfg.scales = np.loadtxt(self.cfg.scalefile,
-                                     unpack=True, usecols=(1, ))
         self._find_files()
         return
 

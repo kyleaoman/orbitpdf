@@ -1,5 +1,4 @@
 from ._orbitscfg import OrbitsConfig
-import numpy as np
 import astropy.units as U
 
 
@@ -34,10 +33,6 @@ class OrbitPDFConfig(OrbitsConfig):
         if set(self.keys()) < self.reqkeys:
             raise AttributeError("Missing OrbitPDFConfig attributes "
                                  "(check OrbitPDFConfig.reqkeys).")
-        if 'rbins' not in self.keys():
-            self.rbins = np.linspace(0, 2.5, 101)
-        if 'vbins' not in self.keys():
-            self.vbins = np.linspace(0, 2.0, 101)
         if 'pdfsfile' not in self.keys():
             self.pdfsfile = 'pdfs_out.hdf5'
         if 'signed_V' not in self.keys():
