@@ -59,7 +59,8 @@ def delta_RV(sat, cluster, iref=None, lbox=None, H=None, signed_V=None,
     if signed_V:
         sgn = np.sign(
             rel_xyz[2] * (
-                rel_vxyz[2] + rel_xyz[2] * a * H.to(U.km / U.s / U.Mpc).value
+                rel_vxyz[2]
+                + rel_xyz[2] * a * H.to(U.km / U.s / U.Mpc).value
             )
         )
         V = sgn * V
@@ -80,7 +81,12 @@ def delta_RV_interlopers(cluster, iref=None, lbox=None, H=None,
         rel_vxyz[:, 2] + H.to(U.km / U.s / U.Mpc).value * a * rel_xyz[:, 2]
     ) / cluster['vrms'][iref]
     if signed_V:
-        sgn = np.sign(rel_xyz[:, 2] * rel_vxyz[:, 2])
+        sgn = np.sign(
+            rel_xyz[:, 2] * (
+                rel_vxyz[:, 2]
+                + rel_xyz[:, 2] * a * H.to(U.km / U.s / U.Mpc).value
+            )
+        )
         V = sgn * V
     return R, V
 
