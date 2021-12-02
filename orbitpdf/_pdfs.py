@@ -12,31 +12,44 @@ qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max',
          'm_max', 'm_infall'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
+    't_crossrvir': 'dimensionless_unscaled',
     't_peri': 'dimensionless_unscaled',
     'r': 'dimensionless_unscaled',
+    'xyz': 'dimensionless_unscaled',
     'v': 'dimensionless_unscaled',
+    'vxyz': 'dimensionless_unscaled',
     'r_min': 'dimensionless_unscaled',
     'v_max': 'dimensionless_unscaled',
     'm_max': 'solMass',
-    'm_infall': 'solMass'
+    'm_crossrvir': 'solMass',
+    'm_infall': 'solMass',
 }
 qdescs = {
     't_infall': 'Scale factor at first infall into final host'
     ' defined as crossing cfg.interloper_dR times the virial'
     ' radius, where the radius is fixed to its value at the'
     ' reference time, and virial is defined as in Bryan & Norman (1998).',
+    't_crossrvir': 'Scale factor at first inward crossing of rvir,'
+    ' where the radius is fixed to its value at the reference time,'
+    ' and virial is defined as in Bryan & Norman (1998).',
     't_peri': 'Scale factor at first pericentre within final host.',
     'r': 'Current deprojected radius, scaled to host virial radius,'
     ' where virial is defined as in Bryan & Norman (1998).',
-    'v': 'Current deprojected velocity, scaled to host *3D* velocity'
+    'xyz': 'Current deprojected position, scaled to host virial radius,'
+    ' where virial is defined as in Bryan & Norman (1998). Sight line is'
+    ' along z direction.',
+    'v': 'Current deprojected speed, scaled to host *3D* velocity'
     ' dispersion.',
+    'vxyz': 'Current deprojected velocity, scaled to host *3D* velocity'
+    ' dispersion. Sight line is along z direction.',
     'r_min': 'Distance of closest approach to final host, scaled to the'
     ' host virial radius, where virial is defined as in Bryan & Norman'
     ' (1998).',
     'v_max': 'Maximum velocity relative to final host, scaled to the host'
     ' *3D* velocity dispersion.',
     'm_max': 'Maximum past subhalo mass.',
-    'm_infall': 'Subhalo mass at infall time.'
+    'm_crossrvir': 'Subhalo mass at first crossing of rvir.',
+    'm_infall': 'Subhalo mass at infall time.',
 }
 
 
@@ -252,6 +265,18 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sat['mvir'][mask]
         )
 
+    # CROSSING OF RVIR TIME & MASS AT THAT TIME
+    try:
+        i_crossrvir = np.argwhere(np.logical_and(
+            rel_r[:-1] > 1,
+            rel_r[1:] < 1
+        )).flatten()[0]
+    except IndexError:
+        pass  # values default to nan
+    else:
+        mask = np.s_[i_crossrvir: i_crossrvir + 1]
+        retval['t_crossrvir']
+
     # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
     # closest recorded approach and speed up to present time,
     # and maximum mass at any past time
@@ -279,6 +304,8 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     # CURRENT POSITIONS
     retval['r'] = rel_r[iref]
     retval['v'] = rel_v[iref]
+    retval['xyz'] = rel_xyz[iref]
+    retval['vxyz'] = rel_vxyz[iref]
 
     return retval
 
