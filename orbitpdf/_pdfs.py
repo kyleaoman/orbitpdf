@@ -8,16 +8,21 @@ import sys
 
 np.seterr(all='ignore')
 
-qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'xyz', 'v', 'vxyz',
-         'r_min', 'v_max', 'm_max', 'm_crossrvir', 'm_infall'}
+qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'x', 'y', 'z', 'v',
+         'vx', 'vy', 'vz', 'r_min', 'v_max', 'm_max', 'm_crossrvir',
+         'm_infall'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
     't_crossrvir': 'dimensionless_unscaled',
     't_peri': 'dimensionless_unscaled',
     'r': 'dimensionless_unscaled',
-    'xyz': 'dimensionless_unscaled',
+    'x': 'dimensionless_unscaled',
+    'y': 'dimensionless_unscaled',
+    'z': 'dimensionless_unscaled',
     'v': 'dimensionless_unscaled',
-    'vxyz': 'dimensionless_unscaled',
+    'vx': 'dimensionless_unscaled',
+    'vy': 'dimensionless_unscaled',
+    'vz': 'dimensionless_unscaled',
     'r_min': 'dimensionless_unscaled',
     'v_max': 'dimensionless_unscaled',
     'm_max': 'solMass',
@@ -35,13 +40,23 @@ qdescs = {
     't_peri': 'Scale factor at first pericentre within final host.',
     'r': 'Current deprojected radius, scaled to host virial radius,'
     ' where virial is defined as in Bryan & Norman (1998).',
-    'xyz': 'Current deprojected position, scaled to host virial radius,'
-    ' where virial is defined as in Bryan & Norman (1998). Sight line is'
-    ' along z direction.',
+    'x': 'Current deprojected position x-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
+    'y': 'Current deprojected position y-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
+    'z': 'Current deprojected position z-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
     'v': 'Current deprojected speed, scaled to host *3D* velocity'
     ' dispersion.',
-    'vxyz': 'Current deprojected velocity, scaled to host *3D* velocity'
-    ' dispersion. Sight line is along z direction.',
+    'vx': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
+    'vy': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
+    'vz': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
     'r_min': 'Distance of closest approach to final host, scaled to the'
     ' host virial radius, where virial is defined as in Bryan & Norman'
     ' (1998).',
@@ -304,8 +319,12 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     # CURRENT POSITIONS
     retval['r'] = rel_r[iref]
     retval['v'] = rel_v[iref]
-    retval['xyz'] = rel_xyz[iref]
-    retval['vxyz'] = rel_vxyz[iref]
+    retval['x'] = rel_xyz[iref][0]
+    retval['y'] = rel_xyz[iref][1]
+    retval['z'] = rel_xyz[iref][2]
+    retval['vx'] = rel_vxyz[iref][0]
+    retval['vy'] = rel_vxyz[iref][1]
+    retval['vz'] = rel_vxyz[iref][2]
 
     return retval
 
