@@ -8,8 +8,8 @@ import sys
 
 np.seterr(all='ignore')
 
-qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max',
-         'm_max', 'm_infall'}
+qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'xyz', 'v', 'vxyz',
+         'r_min', 'v_max', 'm_max', 'm_crossrvir', 'm_infall'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
     't_crossrvir': 'dimensionless_unscaled',
