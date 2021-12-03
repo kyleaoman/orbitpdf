@@ -290,7 +290,16 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
         pass  # values default to nan
     else:
         mask = np.s_[i_crossrvir: i_crossrvir + 1]
-        retval['t_crossrvir']
+        retval['t_crossrvir'] = np.interp(
+            1,
+            rel_r[mask],
+            sfs[mask]
+        )
+        retval['m_crossrvir'] = np.interp(
+            retval['t_crossrvir'],
+            sfs[mask],
+            sat['mvir'][mask]
+        )
 
     # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
     # closest recorded approach and speed up to present time,
