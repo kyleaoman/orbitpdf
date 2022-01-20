@@ -10,7 +10,7 @@ np.seterr(all='ignore')
 
 qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'x', 'y', 'z', 'v',
          'vx', 'vy', 'vz', 'r_min', 'v_max', 'm_max', 'm_crossrvir',
-         'm_infall'}
+         'm_infall', 'subsub_infall', 'subsub_crossrvir'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
     't_crossrvir': 'dimensionless_unscaled',
@@ -28,6 +28,8 @@ qunits = {
     'm_max': 'solMass',
     'm_crossrvir': 'solMass',
     'm_infall': 'solMass',
+    'subsub_infall': 'dimensionless_unscaled',
+    'subsub_crossrvir': 'dimensionless_unscaled',
 }
 qdescs = {
     't_infall': 'Scale factor at first infall into final host'
@@ -65,6 +67,10 @@ qdescs = {
     'm_max': 'Maximum past subhalo mass.',
     'm_crossrvir': 'Subhalo mass at first crossing of rvir.',
     'm_infall': 'Subhalo mass at infall time.',
+    'subsub_infall': 'Subhalo was a satellite of another satellite at infall'
+    ' time.',
+    'subsub_crossrvir': 'Subhalo was a satellite of another satellite at first'
+    ' crossing of rvir',
 }
 
 
@@ -291,7 +297,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     except IndexError:
         pass  # values default to nan
     else:
-        mask = np.s_[i_infall: i_infall + 1]
+        mask = np.s_[i_infall: i_infall + 2]
         retval['t_infall'] = np.interp(
             interloper_dR,
             rel_r[mask],
@@ -302,6 +308,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sfs[mask],
             sat['mvir'][mask]
         )
+        retval['subsub_infall'] = sat['subsub'][i_infall + 1]
 
     # CROSSING OF RVIR TIME & MASS AT THAT TIME
     try:
@@ -312,7 +319,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     except IndexError:
         pass  # values default to nan
     else:
-        mask = np.s_[i_crossrvir: i_crossrvir + 1]
+        mask = np.s_[i_crossrvir: i_crossrvir + 2]
         retval['t_crossrvir'] = np.interp(
             1,
             rel_r[mask],
@@ -323,6 +330,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sfs[mask],
             sat['mvir'][mask]
         )
+        retval['subsub_crossrvir'] = sat['subsub'][i_crossrvir + 1]
 
     # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
     # closest recorded approach and speed up to present time,
