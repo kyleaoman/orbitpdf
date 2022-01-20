@@ -131,12 +131,16 @@ class OrbitPDF(object):
 
         self.rlist = list()
         self.vlist = list()
+        self.hostidlist = list()
+        self.satidlist = list()
         self.mhostlist = list()
         self.msatlist = list()
         self.qlists = None
 
         self.rlist_i = list()
         self.vlist_i = list()
+        self.hostidlist_i = list()
+        self.satidlist_i = list()
         self.mhostlist_i = list()
         self.msatlist_i = list()
 
@@ -172,14 +176,18 @@ class OrbitPDF(object):
                 output.append(target(cid))
         self.rlist = np.concatenate([o[0] for o in output])
         self.vlist = np.concatenate([o[1] for o in output])
-        self.mhostlist = np.concatenate([o[2] for o in output])
-        self.msatlist = np.concatenate([o[3] for o in output])
-        self.qlists = np.concatenate([o[4] for o in output])
-        self.rlist_i = np.concatenate([o[5] for o in output])
-        self.vlist_i = np.concatenate([o[6] for o in output])
-        self.mhostlist_i = np.concatenate([o[7] for o in output])
-        self.msatlist_i = np.concatenate([o[8] for o in output])
-        self.statistics = np.concatenate([o[9] for o in output])
+        self.hostidlist = np.concatenate([o[2] for o in output])
+        self.satidlist = np.concatenate([o[3] for o in output])
+        self.mhostlist = np.concatenate([o[4] for o in output])
+        self.msatlist = np.concatenate([o[5] for o in output])
+        self.qlists = np.concatenate([o[6] for o in output])
+        self.rlist_i = np.concatenate([o[7] for o in output])
+        self.vlist_i = np.concatenate([o[8] for o in output])
+        self.hostidlist_i = np.concatenate([o[9] for o in output])
+        self.satidlist_i = np.concatenate([o[10] for o in output])
+        self.mhostlist_i = np.concatenate([o[11] for o in output])
+        self.msatlist_i = np.concatenate([o[12] for o in output])
+        self.statistics = np.concatenate([o[13] for o in output])
         self.statistics = {k: self.statistics[k].sum()
                            for k in self.statistics.dtype.names}
 
@@ -199,6 +207,13 @@ class OrbitPDF(object):
             g['V'].attrs['unit'] = str(U.dimensionless_unscaled)
             g['V'].attrs['desc'] = 'Line-of-sight velocity offset from host,' \
                 ' V/sigma, with sigma the *3D* cluster velocity dispersion.'
+            g['hostID'] = np.array(self.hostidlist)
+            g['hostID'].attrs['unit'] = str(U.dimensionless_unscaled)
+            g['hostID'].attrs['desc'] = 'Host unique identifier from ROCKSTAR.'
+            g['satID'] = np.array(self.satidlist)
+            g['satID'].attrs['unit'] = str(U.dimensionless_unscaled)
+            g['satID'].attrs['desc'] = 'Satellite unique identifier from ' \
+                'ROCKSTAR.'
             g['Mhost'] = np.array(self.mhostlist)
             g['Mhost'].attrs['unit'] = str(U.Msun)
             g['Mhost'].attrs['desc'] = 'Host halo virial mass, with virial' \
@@ -222,13 +237,21 @@ class OrbitPDF(object):
                 g['V'].attrs['desc'] = 'Line-of-sight velocity offset from' \
                     ' host, V/sigma, with sigma the *3D* cluster velocity' \
                     ' dispersion.'
+                g['hostID'] = np.array(self.hostidlist_i)
+                g['hostID'].attrs['unit'] = str(U.dimensionless_unscaled)
+                g['hostID'].attrs['desc'] = 'Host unique identifier from ' \
+                    'ROCKSTAR.'
+                g['satID'] = np.array(self.satidlist_i)
+                g['satID'].attrs['unit'] = str(U.dimensionless_unscaled)
+                g['satID'].attrs['desc'] = 'Interloper unique identifier ' \
+                    'from ROCKSTAR.'
                 g['Mhost'] = np.array(self.mhostlist_i)
                 g['Mhost'].attrs['unit'] = str(U.Msun)
-                g['Mhost'].attrs['unit'] = 'Host halo virial mass, with' \
+                g['Mhost'].attrs['desc'] = 'Host halo virial mass, with' \
                     ' virial as defined in Bryan & Norman (1998).'
                 g['Msat'] = np.array(self.msatlist_i)
                 g['Msat'].attrs['unit'] = str(U.Msun)
-                g['Msat'].attrs['unit'] = 'Interloper halo virial mass, with' \
+                g['Msat'].attrs['desc'] = 'Interloper halo virial mass, with' \
                     ' virial as defined in Bryan & Norman (1998).'
             g = f.create_group('config')
             for key, value in self.cfg.items():
@@ -358,6 +381,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
     )
     rlist = list()
     vlist = list()
+    hostidlist = list()
+    satidlist = list()
     mhostlist = list()
     msatlist = list()
     qlists = list()
@@ -381,6 +406,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 len(cluster['satellites'])
             rlist = np.empty((0, ))
             vlist = np.empty((0, ))
+            hostidlist = np.empty((0, ))
+            satidlist = np.empty((0, ))
             mhostlist = np.empty((0, ))
             msatlist = np.empty((0, ))
             qlists = np.empty(
@@ -389,10 +416,13 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
             )
             rlist_i = np.empty((0, ))
             vlist_i = np.empty((0, ))
+            hostidlist_i = np.empty((0, ))
+            satidlist_i = np.empty((0, ))
             mhostlist_i = np.empty((0, ))
             msatlist_i = np.empty((0, ))
-            return rlist, vlist, mhostlist, msatlist, qlists, \
-                rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
+            return rlist, vlist, hostidlist, satidlist, mhostlist, msatlist, \
+                qlists, rlist_i, vlist_i, hostidlist_i, satidlist_i, \
+                mhostlist_i, msatlist_i, statistics
 
         for sat_id, sat in cluster['satellites'].items():
 
@@ -428,6 +458,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 continue
             rlist.append(r)
             vlist.append(v)
+            hostidlist.append(cluster_id)
+            satidlist.append(sat_id)
             mhostlist.append(cluster['mvir'][iref])
             msatlist.append(sat['mvir'][iref])
             qlists.append(calculate_q(sat, cluster, iref=iref, lbox=lbox,
@@ -437,6 +469,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
 
         rlist = np.array(rlist)
         vlist = np.array(vlist)
+        hostidlist = np.array(hostidlist)
+        satidlist = np.array(satidlist)
         mhostlist = np.array(mhostlist)
         msatlist = np.array(msatlist)
         if len(qlists):
@@ -467,14 +501,20 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                                      signed_V=signed_V, z=z)
             rlist_i = more_interloper_rs[select_interlopers]
             vlist_i = more_interloper_vs[select_interlopers]
+            hostidlist_i = np.ones(np.sum(select_interlopers)) \
+                * cluster_id
+            satidlist_i = cluster['satellites/ids'][select_interlopers]
             mhostlist_i = np.ones(np.sum(select_interlopers)) \
                 * cluster['mvir'][iref]
             msatlist_i = cluster['interlopers/mvir'][select_interlopers]
         else:
             rlist_i = np.empty((0, ))
             vlist_i = np.empty((0, ))
+            hostidlist_i = np.empty((0, ))
+            satidlist_i = np.empty((0, ))
             mhostlist_i = np.empty((0, ))
             msatlist_i = np.empty((0, ))
 
-        return rlist, vlist, mhostlist, msatlist, qlists, \
-            rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
+        return rlist, vlist, hostidlist, satidlist, mhostlist, msatlist, \
+            qlists, rlist_i, vlist_i, hostidlist_i, satidlist_i, mhostlist_i, \
+            msatlist_i, statistics
