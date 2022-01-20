@@ -10,7 +10,7 @@ np.seterr(all='ignore')
 
 qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'x', 'y', 'z', 'v',
          'vx', 'vy', 'vz', 'r_min', 'v_max', 'm_max', 'm_crossrvir',
-         'm_infall', 'subsub_infall', 'subsub_crossrvir'}
+         'm_infall', 'is_subsub_infall', 'is_subsub_crossrvir'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
     't_crossrvir': 'dimensionless_unscaled',
@@ -28,8 +28,8 @@ qunits = {
     'm_max': 'solMass',
     'm_crossrvir': 'solMass',
     'm_infall': 'solMass',
-    'subsub_infall': 'dimensionless_unscaled',
-    'subsub_crossrvir': 'dimensionless_unscaled',
+    'is_subsub_infall': 'dimensionless_unscaled',
+    'is_subsub_crossrvir': 'dimensionless_unscaled',
 }
 qdescs = {
     't_infall': 'Scale factor at first infall into final host'
@@ -67,10 +67,10 @@ qdescs = {
     'm_max': 'Maximum past subhalo mass.',
     'm_crossrvir': 'Subhalo mass at first crossing of rvir.',
     'm_infall': 'Subhalo mass at infall time.',
-    'subsub_infall': 'Subhalo was a satellite of another satellite at infall'
-    ' time.',
-    'subsub_crossrvir': 'Subhalo was a satellite of another satellite at first'
-    ' crossing of rvir',
+    'is_subsub_infall': 'Subhalo was a satellite of another satellite at'
+    ' infall time.',
+    'is_subsub_crossrvir': 'Subhalo was a satellite of another satellite at'
+    ' first crossing of rvir',
 }
 
 
@@ -308,7 +308,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sfs[mask],
             sat['mvir'][mask]
         )
-        retval['subsub_infall'] = sat['subsub'][i_infall + 1]
+        retval['is_subsub_infall'] = sat['is_subsub'][i_infall + 1]
 
     # CROSSING OF RVIR TIME & MASS AT THAT TIME
     try:
@@ -330,7 +330,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sfs[mask],
             sat['mvir'][mask]
         )
-        retval['subsub_crossrvir'] = sat['subsub'][i_crossrvir + 1]
+        retval['is_subsub_crossrvir'] = sat['is_subsub'][i_crossrvir + 1]
 
     # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
     # closest recorded approach and speed up to present time,
@@ -466,8 +466,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 continue
             rlist.append(r)
             vlist.append(v)
-            hostidlist.append(cluster_id)
-            satidlist.append(sat_id)
+            hostidlist.append(int(cluster_id))
+            satidlist.append(int(sat_id))
             mhostlist.append(cluster['mvir'][iref])
             msatlist.append(sat['mvir'][iref])
             qlists.append(calculate_q(sat, cluster, iref=iref, lbox=lbox,
@@ -509,11 +509,15 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                                      signed_V=signed_V, z=z)
             rlist_i = more_interloper_rs[select_interlopers]
             vlist_i = more_interloper_vs[select_interlopers]
-            hostidlist_i = np.ones(np.sum(select_interlopers)) \
-                * cluster_id
-            satidlist_i = cluster['satellites/ids'][select_interlopers]
-            mhostlist_i = np.ones(np.sum(select_interlopers)) \
-                * cluster['mvir'][iref]
+            hostidlist_i = np.repeat(
+                [int(cluster_id)],
+                np.sum(select_interlopers)
+            )
+            satidlist_i = cluster['interlopers/ids'][select_interlopers]
+            mhostlist_i = np.repeat(
+                [cluster['mvir'][iref]],
+                np.sum(select_interlopers)
+            )
             msatlist_i = cluster['interlopers/mvir'][select_interlopers]
         else:
             rlist_i = np.empty((0, ))
