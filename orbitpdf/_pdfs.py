@@ -8,35 +8,69 @@ import sys
 
 np.seterr(all='ignore')
 
-qkeys = {'t_infall', 't_peri', 'r', 'v', 'r_min', 'v_max',
-         'm_max', 'm_infall'}
+qkeys = {'t_infall', 't_crossrvir', 't_peri', 'r', 'x', 'y', 'z', 'v',
+         'vx', 'vy', 'vz', 'r_min', 'v_max', 'm_max', 'm_crossrvir',
+         'm_infall', 'is_subsub_infall', 'is_subsub_crossrvir'}
 qunits = {
     't_infall': 'dimensionless_unscaled',
+    't_crossrvir': 'dimensionless_unscaled',
     't_peri': 'dimensionless_unscaled',
     'r': 'dimensionless_unscaled',
+    'x': 'dimensionless_unscaled',
+    'y': 'dimensionless_unscaled',
+    'z': 'dimensionless_unscaled',
     'v': 'dimensionless_unscaled',
+    'vx': 'dimensionless_unscaled',
+    'vy': 'dimensionless_unscaled',
+    'vz': 'dimensionless_unscaled',
     'r_min': 'dimensionless_unscaled',
     'v_max': 'dimensionless_unscaled',
     'm_max': 'solMass',
-    'm_infall': 'solMass'
+    'm_crossrvir': 'solMass',
+    'm_infall': 'solMass',
+    'is_subsub_infall': 'dimensionless_unscaled',
+    'is_subsub_crossrvir': 'dimensionless_unscaled',
 }
 qdescs = {
     't_infall': 'Scale factor at first infall into final host'
     ' defined as crossing cfg.interloper_dR times the virial'
     ' radius, where the radius is fixed to its value at the'
     ' reference time, and virial is defined as in Bryan & Norman (1998).',
+    't_crossrvir': 'Scale factor at first inward crossing of rvir,'
+    ' where the radius is fixed to its value at the reference time,'
+    ' and virial is defined as in Bryan & Norman (1998).',
     't_peri': 'Scale factor at first pericentre within final host.',
     'r': 'Current deprojected radius, scaled to host virial radius,'
     ' where virial is defined as in Bryan & Norman (1998).',
-    'v': 'Current deprojected velocity, scaled to host *3D* velocity'
+    'x': 'Current deprojected position x-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
+    'y': 'Current deprojected position y-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
+    'z': 'Current deprojected position z-component, scaled to host virial'
+    ' radius, where virial is defined as in Bryan & Norman (1998). Sight line'
+    ' is along z direction.',
+    'v': 'Current deprojected speed, scaled to host *3D* velocity'
     ' dispersion.',
+    'vx': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
+    'vy': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
+    'vz': 'Current deprojected velocity x-component, scaled to host *3D*'
+    ' velocity dispersion. Sight line is along z direction.',
     'r_min': 'Distance of closest approach to final host, scaled to the'
     ' host virial radius, where virial is defined as in Bryan & Norman'
     ' (1998).',
     'v_max': 'Maximum velocity relative to final host, scaled to the host'
     ' *3D* velocity dispersion.',
     'm_max': 'Maximum past subhalo mass.',
-    'm_infall': 'Subhalo mass at infall time.'
+    'm_crossrvir': 'Subhalo mass at first crossing of rvir.',
+    'm_infall': 'Subhalo mass at infall time.',
+    'is_subsub_infall': 'Subhalo was a satellite of another satellite at'
+    ' infall time.',
+    'is_subsub_crossrvir': 'Subhalo was a satellite of another satellite at'
+    ' first crossing of rvir',
 }
 
 
@@ -57,7 +91,12 @@ def delta_RV(sat, cluster, iref=None, lbox=None, H=None, signed_V=None,
         rel_vxyz[2] + H.to(U.km / U.s / U.Mpc).value * a * rel_xyz[2]
     ) / cluster['vrms'][iref]
     if signed_V:
-        sgn = np.sign(rel_xyz[2] * rel_vxyz[2])
+        sgn = np.sign(
+            rel_xyz[2] * (
+                rel_vxyz[2]
+                + rel_xyz[2] * a * H.to(U.km / U.s / U.Mpc).value
+            )
+        )
         V = sgn * V
     return R, V
 
@@ -76,7 +115,12 @@ def delta_RV_interlopers(cluster, iref=None, lbox=None, H=None,
         rel_vxyz[:, 2] + H.to(U.km / U.s / U.Mpc).value * a * rel_xyz[:, 2]
     ) / cluster['vrms'][iref]
     if signed_V:
-        sgn = np.sign(rel_xyz[:, 2] * rel_vxyz[:, 2])
+        sgn = np.sign(
+            rel_xyz[:, 2] * (
+                rel_vxyz[:, 2]
+                + rel_xyz[:, 2] * a * H.to(U.km / U.s / U.Mpc).value
+            )
+        )
         V = sgn * V
     return R, V
 
@@ -93,12 +137,16 @@ class OrbitPDF(object):
 
         self.rlist = list()
         self.vlist = list()
+        self.hostidlist = list()
+        self.satidlist = list()
         self.mhostlist = list()
         self.msatlist = list()
         self.qlists = None
 
         self.rlist_i = list()
         self.vlist_i = list()
+        self.hostidlist_i = list()
+        self.satidlist_i = list()
         self.mhostlist_i = list()
         self.msatlist_i = list()
 
@@ -134,14 +182,18 @@ class OrbitPDF(object):
                 output.append(target(cid))
         self.rlist = np.concatenate([o[0] for o in output])
         self.vlist = np.concatenate([o[1] for o in output])
-        self.mhostlist = np.concatenate([o[2] for o in output])
-        self.msatlist = np.concatenate([o[3] for o in output])
-        self.qlists = np.concatenate([o[4] for o in output])
-        self.rlist_i = np.concatenate([o[5] for o in output])
-        self.vlist_i = np.concatenate([o[6] for o in output])
-        self.mhostlist_i = np.concatenate([o[7] for o in output])
-        self.msatlist_i = np.concatenate([o[8] for o in output])
-        self.statistics = np.concatenate([o[9] for o in output])
+        self.hostidlist = np.concatenate([o[2] for o in output])
+        self.satidlist = np.concatenate([o[3] for o in output])
+        self.mhostlist = np.concatenate([o[4] for o in output])
+        self.msatlist = np.concatenate([o[5] for o in output])
+        self.qlists = np.concatenate([o[6] for o in output])
+        self.rlist_i = np.concatenate([o[7] for o in output])
+        self.vlist_i = np.concatenate([o[8] for o in output])
+        self.hostidlist_i = np.concatenate([o[9] for o in output])
+        self.satidlist_i = np.concatenate([o[10] for o in output])
+        self.mhostlist_i = np.concatenate([o[11] for o in output])
+        self.msatlist_i = np.concatenate([o[12] for o in output])
+        self.statistics = np.concatenate([o[13] for o in output])
         self.statistics = {k: self.statistics[k].sum()
                            for k in self.statistics.dtype.names}
 
@@ -161,6 +213,13 @@ class OrbitPDF(object):
             g['V'].attrs['unit'] = str(U.dimensionless_unscaled)
             g['V'].attrs['desc'] = 'Line-of-sight velocity offset from host,' \
                 ' V/sigma, with sigma the *3D* cluster velocity dispersion.'
+            g['hostID'] = np.array(self.hostidlist)
+            g['hostID'].attrs['unit'] = str(U.dimensionless_unscaled)
+            g['hostID'].attrs['desc'] = 'Host unique identifier from ROCKSTAR.'
+            g['satID'] = np.array(self.satidlist)
+            g['satID'].attrs['unit'] = str(U.dimensionless_unscaled)
+            g['satID'].attrs['desc'] = 'Satellite unique identifier from ' \
+                'ROCKSTAR.'
             g['Mhost'] = np.array(self.mhostlist)
             g['Mhost'].attrs['unit'] = str(U.Msun)
             g['Mhost'].attrs['desc'] = 'Host halo virial mass, with virial' \
@@ -184,13 +243,21 @@ class OrbitPDF(object):
                 g['V'].attrs['desc'] = 'Line-of-sight velocity offset from' \
                     ' host, V/sigma, with sigma the *3D* cluster velocity' \
                     ' dispersion.'
+                g['hostID'] = np.array(self.hostidlist_i)
+                g['hostID'].attrs['unit'] = str(U.dimensionless_unscaled)
+                g['hostID'].attrs['desc'] = 'Host unique identifier from ' \
+                    'ROCKSTAR.'
+                g['satID'] = np.array(self.satidlist_i)
+                g['satID'].attrs['unit'] = str(U.dimensionless_unscaled)
+                g['satID'].attrs['desc'] = 'Interloper unique identifier ' \
+                    'from ROCKSTAR.'
                 g['Mhost'] = np.array(self.mhostlist_i)
                 g['Mhost'].attrs['unit'] = str(U.Msun)
-                g['Mhost'].attrs['unit'] = 'Host halo virial mass, with' \
+                g['Mhost'].attrs['desc'] = 'Host halo virial mass, with' \
                     ' virial as defined in Bryan & Norman (1998).'
                 g['Msat'] = np.array(self.msatlist_i)
                 g['Msat'].attrs['unit'] = str(U.Msun)
-                g['Msat'].attrs['unit'] = 'Interloper halo virial mass, with' \
+                g['Msat'].attrs['desc'] = 'Interloper halo virial mass, with' \
                     ' virial as defined in Bryan & Norman (1998).'
             g = f.create_group('config')
             for key, value in self.cfg.items():
@@ -230,7 +297,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     except IndexError:
         pass  # values default to nan
     else:
-        mask = np.s_[i_infall: i_infall + 1]
+        mask = np.s_[i_infall: i_infall + 2]
         retval['t_infall'] = np.interp(
             interloper_dR,
             rel_r[mask],
@@ -241,6 +308,29 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
             sfs[mask],
             sat['mvir'][mask]
         )
+        retval['is_subsub_infall'] = sat['is_subsub'][i_infall + 1]
+
+    # CROSSING OF RVIR TIME & MASS AT THAT TIME
+    try:
+        i_crossrvir = np.argwhere(np.logical_and(
+            rel_r[:-1] > 1,
+            rel_r[1:] < 1
+        )).flatten()[0]
+    except IndexError:
+        pass  # values default to nan
+    else:
+        mask = np.s_[i_crossrvir: i_crossrvir + 2]
+        retval['t_crossrvir'] = np.interp(
+            1,
+            rel_r[mask],
+            sfs[mask]
+        )
+        retval['m_crossrvir'] = np.interp(
+            retval['t_crossrvir'],
+            sfs[mask],
+            sat['mvir'][mask]
+        )
+        retval['is_subsub_crossrvir'] = sat['is_subsub'][i_crossrvir + 1]
 
     # CLOSEST APPROACH AND MAX SPEED SO FAR, AND MAX PAST MASS
     # closest recorded approach and speed up to present time,
@@ -256,7 +346,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
         np.r_[rel_r[:-1] < rel_r[1:], 1]
     )
     minima[-1] = False
-    minima[rel_r > interloper_dR] = False  # should be rel_r > 1 (i.e. rvir)
+    minima[rel_r > 1] = False  # require r_peri < r_vir
     if np.sum(minima) > 0:
         retval['t_peri'] = np.min(sfs[minima])
     else:
@@ -269,6 +359,12 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
     # CURRENT POSITIONS
     retval['r'] = rel_r[iref]
     retval['v'] = rel_v[iref]
+    retval['x'] = rel_xyz[iref][0]
+    retval['y'] = rel_xyz[iref][1]
+    retval['z'] = rel_xyz[iref][2]
+    retval['vx'] = rel_vxyz[iref][0]
+    retval['vy'] = rel_vxyz[iref][1]
+    retval['vz'] = rel_vxyz[iref][2]
 
     return retval
 
@@ -293,6 +389,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
     )
     rlist = list()
     vlist = list()
+    hostidlist = list()
+    satidlist = list()
     mhostlist = list()
     msatlist = list()
     qlists = list()
@@ -316,6 +414,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 len(cluster['satellites'])
             rlist = np.empty((0, ))
             vlist = np.empty((0, ))
+            hostidlist = np.empty((0, ))
+            satidlist = np.empty((0, ))
             mhostlist = np.empty((0, ))
             msatlist = np.empty((0, ))
             qlists = np.empty(
@@ -324,10 +424,13 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
             )
             rlist_i = np.empty((0, ))
             vlist_i = np.empty((0, ))
+            hostidlist_i = np.empty((0, ))
+            satidlist_i = np.empty((0, ))
             mhostlist_i = np.empty((0, ))
             msatlist_i = np.empty((0, ))
-            return rlist, vlist, mhostlist, msatlist, qlists, \
-                rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
+            return rlist, vlist, hostidlist, satidlist, mhostlist, msatlist, \
+                qlists, rlist_i, vlist_i, hostidlist_i, satidlist_i, \
+                mhostlist_i, msatlist_i, statistics
 
         for sat_id, sat in cluster['satellites'].items():
 
@@ -363,6 +466,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                 continue
             rlist.append(r)
             vlist.append(v)
+            hostidlist.append(int(cluster_id))
+            satidlist.append(int(sat_id))
             mhostlist.append(cluster['mvir'][iref])
             msatlist.append(sat['mvir'][iref])
             qlists.append(calculate_q(sat, cluster, iref=iref, lbox=lbox,
@@ -372,6 +477,8 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
 
         rlist = np.array(rlist)
         vlist = np.array(vlist)
+        hostidlist = np.array(hostidlist)
+        satidlist = np.array(satidlist)
         mhostlist = np.array(mhostlist)
         msatlist = np.array(msatlist)
         if len(qlists):
@@ -402,14 +509,24 @@ def _process_orbit(cluster_id, iref=None, orbitfile=None,
                                      signed_V=signed_V, z=z)
             rlist_i = more_interloper_rs[select_interlopers]
             vlist_i = more_interloper_vs[select_interlopers]
-            mhostlist_i = np.ones(np.sum(select_interlopers)) \
-                * cluster['mvir'][iref]
+            hostidlist_i = np.repeat(
+                [int(cluster_id)],
+                np.sum(select_interlopers)
+            )
+            satidlist_i = cluster['interlopers/ids'][select_interlopers]
+            mhostlist_i = np.repeat(
+                [cluster['mvir'][iref]],
+                np.sum(select_interlopers)
+            )
             msatlist_i = cluster['interlopers/mvir'][select_interlopers]
         else:
             rlist_i = np.empty((0, ))
             vlist_i = np.empty((0, ))
+            hostidlist_i = np.empty((0, ))
+            satidlist_i = np.empty((0, ))
             mhostlist_i = np.empty((0, ))
             msatlist_i = np.empty((0, ))
 
-        return rlist, vlist, mhostlist, msatlist, qlists, \
-            rlist_i, vlist_i, mhostlist_i, msatlist_i, statistics
+        return rlist, vlist, hostidlist, satidlist, mhostlist, msatlist, \
+            qlists, rlist_i, vlist_i, hostidlist_i, satidlist_i, mhostlist_i, \
+            msatlist_i, statistics
