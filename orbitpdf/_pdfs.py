@@ -256,7 +256,7 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
         np.r_[rel_r[:-1] < rel_r[1:], 1]
     )
     minima[-1] = False
-    minima[rel_r > interloper_dR] = False
+    minima[rel_r > interloper_dR] = False  # should be rel_r > 1 (i.e. rvir)
     if np.sum(minima) > 0:
         retval['t_peri'] = np.min(sfs[minima])
     else:
