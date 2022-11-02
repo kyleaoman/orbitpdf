@@ -300,16 +300,16 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
         mask = np.s_[i_infall: i_infall + 2]
         retval['t_infall'] = np.interp(
             interloper_dR,
-            rel_r[mask],
-            sfs[mask]
+            rel_r[mask][::-1],
+            sfs[mask][::-1],
         )
+
         retval['m_infall'] = np.interp(
             retval['t_infall'],
-            sfs[mask],
-            sat['mvir'][mask]
+            sfs[mask][::-1],
+            sat['mvir'][mask][::-1],
         )
         retval['is_subsub_infall'] = sat['is_subsub'][i_infall + 1]
-
     # CROSSING OF RVIR TIME & MASS AT THAT TIME
     try:
         i_crossrvir = np.argwhere(np.logical_and(
@@ -322,13 +322,13 @@ def calculate_q(sat, cluster, iref=None, lbox=None, interloper_dR=None,
         mask = np.s_[i_crossrvir: i_crossrvir + 2]
         retval['t_crossrvir'] = np.interp(
             1,
-            rel_r[mask],
-            sfs[mask]
+            rel_r[mask][::-1],
+            sfs[mask][::-1],
         )
         retval['m_crossrvir'] = np.interp(
             retval['t_crossrvir'],
-            sfs[mask],
-            sat['mvir'][mask]
+            sfs[mask][::-1],
+            sat['mvir'][mask][::-1],
         )
         retval['is_subsub_crossrvir'] = sat['is_subsub'][i_crossrvir + 1]
 
