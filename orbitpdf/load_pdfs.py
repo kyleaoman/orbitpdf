@@ -6,34 +6,46 @@ import h5py
 _lock = Lock()
 
 
-def _tailor_j(js, rank=None, pdffile=None, intervals=None, Qkey=None,
-              Qbins=None, use_interlopers=None, use_Mmax=None):
+def _tailor_j(
+    js,
+    rank=None,
+    pdffile=None,
+    intervals=None,
+    Qkey=None,
+    Qbins=None,
+    use_interlopers=None,
+    use_Mmax=None,
+):
     PDFs = np.ones((len(js), (len(Qbins) - 1))) * np.nan
     with _lock:
         with h5py.File(pdffile) as f:
-            Mhost_s = np.log10(f['/satellites/Mhost'][()])
+            Mhost_s = np.log10(f["/satellites/Mhost"][()])
             if use_Mmax:
-                Msat_s = np.log10(f['/satellites/m_max'][()])
+                Msat_s = np.log10(f["/satellites/m_max"][()])
             else:
-                Msat_s = np.log10(f['/satellites/Msat'][()])
-            V_s = f['/satellites/V'][()]
-            R_s = f['/satellites/R'][()]
-            Q_s = f['/satellites/{:s}'.format(Qkey)][()]
-            Mhost_i = np.log10(f['/interlopers/Mhost'][()])
-            Msat_i = np.log10(f['/interlopers/Msat'][()])
-            V_i = f['/interlopers/V'][()]
-            R_i = f['/interlopers/R'][()]
+                Msat_s = np.log10(f["/satellites/Msat"][()])
+            V_s = f["/satellites/V"][()]
+            R_s = f["/satellites/R"][()]
+            Q_s = f["/satellites/{:s}".format(Qkey)][()]
+            Mhost_i = np.log10(f["/interlopers/Mhost"][()])
+            Msat_i = np.log10(f["/interlopers/Msat"][()])
+            V_i = f["/interlopers/V"][()]
+            R_i = f["/interlopers/R"][()]
     for j, (Mhost_j, Msat_j, V_j, R_j) in enumerate(js):
-        mask_s = (np.abs(Mhost_s - Mhost_j) < intervals[0]) \
-            * (np.abs(Msat_s - Msat_j) < intervals[1]) \
-            * (np.abs(R_s - R_j) < intervals[2]) \
+        mask_s = (
+            (np.abs(Mhost_s - Mhost_j) < intervals[0])
+            * (np.abs(Msat_s - Msat_j) < intervals[1])
+            * (np.abs(R_s - R_j) < intervals[2])
             * (np.abs(V_s - V_j) < intervals[3])
+        )
         N_s = np.sum(mask_s)
         if N_s > 0:
-            mask_i = (np.abs(Mhost_i - Mhost_j) < intervals[0]) \
-                * (np.abs(Msat_i - Msat_j) < intervals[1]) \
-                * (np.abs(R_i - R_j) < intervals[2]) \
+            mask_i = (
+                (np.abs(Mhost_i - Mhost_j) < intervals[0])
+                * (np.abs(Msat_i - Msat_j) < intervals[1])
+                * (np.abs(R_i - R_j) < intervals[2])
                 * (np.abs(V_i - V_j) < intervals[3])
+            )
             N_i = np.sum(mask_i)
             norm = N_s + N_i if use_interlopers else N_s
             Q_j = Q_s[mask_s]
@@ -45,19 +57,19 @@ def _tailor_j(js, rank=None, pdffile=None, intervals=None, Qkey=None,
 
 
 def load_pdfs(
-        pdffile,
-        Mhost,
-        Msat,
-        R,
-        V,
-        intervals=(.5, .5, .05, .04),
-        Qkey='t_peri',
-        Qbins=np.linspace(0, 2, 100),
-        use_interlopers=True,
-        use_Mmax=True,
-        ncpu=2
+    pdffile,
+    Mhost,
+    Msat,
+    R,
+    V,
+    intervals=(0.5, 0.5, 0.05, 0.04),
+    Qkey="t_peri",
+    Qbins=np.linspace(0, 2, 100),
+    use_interlopers=True,
+    use_Mmax=True,
+    ncpu=2,
 ):
-    '''
+    """
     Construct pdf for an aperture in (Mhost, Msat, R, V).
 
     Parameters
@@ -110,21 +122,23 @@ def load_pdfs(
 
     ncpu : int
         Number of processors to use for parallel calculation. (Default: 2.)
-    '''
+    """
     Mhost = np.log10(Mhost)
     Msat = np.log10(Msat)
 
     js = np.array_split(
         np.array(
             list(zip(Mhost, Msat, V, R)),
-            dtype=np.dtype([
-                ('Mhost', np.float),
-                ('Msat', np.float),
-                ('V', np.float),
-                ('R', np.float),
-            ])
+            dtype=np.dtype(
+                [
+                    ("Mhost", np.float),
+                    ("Msat", np.float),
+                    ("V", np.float),
+                    ("R", np.float),
+                ]
+            ),
         ),
-        ncpu
+        ncpu,
     )
     ranked_js = list(zip(range(ncpu), js))
 
@@ -134,7 +148,7 @@ def load_pdfs(
         Qkey=Qkey,
         Qbins=Qbins,
         use_interlopers=use_interlopers,
-        use_Mmax=use_Mmax
+        use_Mmax=use_Mmax,
     )
 
     def target(rj):
